@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "yandex-tracker-better-search"
+version = "0.1"
+description = "Better search for Yandex Tracker"
+authors = ["Alexander Nalobin"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+yandex-tracker-client = "^2.8"
+fastapi = "^0.115.11"
+uvicorn = "^0.34.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+start = "yandex_tracker_better_search.main:start"

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yandex Tracker Better Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        main {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .form-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="search"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+
+        .search-container {
+            display: none;
+            /* Hidden initially */
+        }
+
+        .search-results {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="header-container"></div>
+
+    <main>
+        <div id="auth-container" class="form-container">
+            <h2>Authentication</h2>
+            <form id="auth-form">
+                <div class="form-group">
+                    <label for="api-key">API Key:</label>
+                    <input type="text" id="api-key" name="api-key" required>
+                </div>
+                <div class="form-group">
+                    <label for="org-id">Organization ID:</label>
+                    <input type="text" id="org-id" name="org-id" required>
+                </div>
+                <button type="submit">Submit</button>
+            </form>
+        </div>
+
+        <div id="search-container" class="search-container">
+            <h2>Search Yandex Tracker</h2>
+            <div class="form-container">
+                <form id="search-form">
+                    <div class="form-group">
+                        <input type="search" id="search-input" placeholder="Enter your search query..." required>
+                    </div>
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+
+            <div id="search-results" class="search-results">
+                <!-- Search results will appear here -->
+                <p>Enter a query to see results.</p>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer-container"></div>
+
+    <script>
+        let homeDomain = window.location.origin;
+
+        document.getElementById('auth-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const apiKey = document.getElementById('api-key').value;
+            const orgId = document.getElementById('org-id').value;
+
+            localStorage.setItem('apiKey', apiKey);
+            localStorage.setItem('orgId', orgId);
+
+            const message = apiCall({ apiKey, orgId }, `${homeDomain}/api/auth`);
+
+            if (message.error) {
+                alert(message.error);
+                return;
+            }
+
+            document.getElementById('auth-container').style.display = 'none';
+            document.getElementById('search-container').style.display = 'block';
+        });
+
+        document.getElementById('search-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const searchQuery = document.getElementById('search-input').value;
+            const resultsContainer = document.getElementById('search-results');
+
+            // Show loading state
+            resultsContainer.innerHTML = '<p>Searching...</p>';
+
+            // In a real application, you would make an API call to your backend
+            // which would then query the Yandex Tracker API with the stored credentials
+
+            // Simulating a search result for demonstration
+            setTimeout(() => {
+                resultsContainer.innerHTML = `<p>Results for "${searchQuery}" would appear here.</p>`;
+            }, 1000);
+        });
+
+        // Check if user is already authenticated
+        window.addEventListener('DOMContentLoaded', function () {
+            const apiKey = localStorage.getItem('apiKey');
+            const orgId = localStorage.getItem('orgId');
+
+            if (apiKey && orgId) {
+                // Auto-show search if credentials exist
+                document.getElementById('auth-container').style.display = 'none';
+                document.getElementById('search-container').style.display = 'block';
+            }
+        });
+
+        async function apiCall(data, url) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const responseData = await response.json();
+
+                // Check for API errors in response
+                if (responseData.error) {
+                    return { error: responseData.error };
+                }
+
+                return { data: responseData };
+
+            } catch (error) {
+                return { error: error.message || 'Network error occurred' };
+            }
+        }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+                const headerResponse = await fetch('components/header.html');
+                const headerHtml = await headerResponse.text();
+                document.getElementById('header-container').innerHTML = headerHtml;
+
+                const footerResponse = await fetch('components/footer.html');
+                const footerHtml = await footerResponse.text();
+                document.getElementById('footer-container').innerHTML = footerHtml;
+            } catch (error) {
+                console.error('Failed to load page components:', error);
+            }
+        });
+    </script>
+</body>
+
+</html>
