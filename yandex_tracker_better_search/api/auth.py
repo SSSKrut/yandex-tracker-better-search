@@ -1,9 +1,16 @@
 from fastapi import APIRouter
 from typing import Union
+from pydantic import BaseModel
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="", tags=["auth"])
+
+
+class AuthRequest(BaseModel):
+    oauth_token: str
+    organization_id: str
 
 
 @router.post("/")
-def read_item():
-    return {"Hello": "World"}
+async def read_auth(request: AuthRequest):
+    print(request)
+    return {"result": "ok"}

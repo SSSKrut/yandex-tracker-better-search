@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yandex Tracker Better Search</title>
@@ -63,7 +64,6 @@
 
         .search-container {
             display: none;
-            /* Hidden initially */
         }
 
         .search-results {
@@ -72,6 +72,28 @@
             padding: 15px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .help-icon {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            line-height: 32px;
+            text-align: center;
+            border-radius: 50%;
+            background-color: #ccc;
+            color: #fff;
+            font-size: 20px;
+            font-weight: bold;
+            margin-left: auto;
+            cursor: pointer;
+            min-width: 32px;
+            text-decoration: none;
+        }
+
+        #auth-form-actions {
+            display: flex;
+            align-items: center;
         }
     </style>
 </head>
@@ -85,14 +107,18 @@
             <h2>Authentication</h2>
             <form id="auth-form">
                 <div class="form-group">
-                    <label for="api-key">API Key:</label>
+                    <label for="api-key">IAM-token:</label>
                     <input type="text" id="api-key" name="api-key" required>
                 </div>
                 <div class="form-group">
                     <label for="org-id">Organization ID:</label>
                     <input type="text" id="org-id" name="org-id" required>
                 </div>
-                <button type="submit">Submit</button>
+                <div id="auth-form-actions">
+                    <button type="submit">Submit</button>
+                    <a href="https://yandex.cloud/ru/docs/iam/operations/iam-token/create#exchange-token"
+                        target="_blank" class="help-icon" title="What is an IAM token and how to get it">?</a>
+                </div>
             </form>
         </div>
 
@@ -115,23 +141,27 @@
     </main>
 
     <div id="footer-container"></div>
-
+    <script>
+        const crypto = require('crypto');
+        const fs = require('fs');
+    </script>
     <script>
         let homeDomain = window.location.origin;
 
-        document.getElementById('auth-form').addEventListener('submit', function (e) {
+        document.getElementById('auth-form').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const apiKey = document.getElementById('api-key').value;
             const orgId = document.getElementById('org-id').value;
 
-            localStorage.setItem('apiKey', apiKey);
-            localStorage.setItem('orgId', orgId);
+            const { error, data: message } = await apiCall({ "oauth_token": apiKey, "organization_id": orgId }, `${homeDomain}/auth/`);
+            if (error) {
+                alert(error);
+                return;
+            }
 
-            const message = apiCall({ apiKey, orgId }, `${homeDomain}/api/auth`);
-
-            if (message.error) {
-                alert(message.error);
+            if (message["result"] != 'ok') {
+                alert('Authentication failed. Please check your credentials and try again.');
                 return;
             }
 
@@ -145,29 +175,13 @@
             const searchQuery = document.getElementById('search-input').value;
             const resultsContainer = document.getElementById('search-results');
 
-            // Show loading state
             resultsContainer.innerHTML = '<p>Searching...</p>';
 
-            // In a real application, you would make an API call to your backend
-            // which would then query the Yandex Tracker API with the stored credentials
-
-            // Simulating a search result for demonstration
             setTimeout(() => {
                 resultsContainer.innerHTML = `<p>Results for "${searchQuery}" would appear here.</p>`;
             }, 1000);
         });
 
-        // Check if user is already authenticated
-        window.addEventListener('DOMContentLoaded', function () {
-            const apiKey = localStorage.getItem('apiKey');
-            const orgId = localStorage.getItem('orgId');
-
-            if (apiKey && orgId) {
-                // Auto-show search if credentials exist
-                document.getElementById('auth-container').style.display = 'none';
-                document.getElementById('search-container').style.display = 'block';
-            }
-        });
 
         async function apiCall(data, url) {
             try {
@@ -181,7 +195,6 @@
 
                 const responseData = await response.json();
 
-                // Check for API errors in response
                 if (responseData.error) {
                     return { error: responseData.error };
                 }
