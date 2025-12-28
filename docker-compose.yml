@@ -1,0 +1,13 @@
+services:
+  manticore:
+    image: manticoresearch/manticore:latest
+    environment:
+      - EXTRA=1
+    ports:
+      # - 9306:9306  # MySQL protocol
+      - 9308:9308  # HTTP API
+    volumes:
+      - manticore_data:/var/lib/manticore
+
+volumes:
+  manticore_data:
