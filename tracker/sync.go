@@ -109,6 +109,7 @@ func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) 
 
 		if r.err != nil {
 			result.Errors = append(result.Errors, r.err)
+			log.Printf("Error fetching comments for issue %s: %v", r.issue.Key, r.err)
 		}
 
 		result.TotalComments += len(r.comments)

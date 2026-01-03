@@ -62,7 +62,7 @@ type Issue struct {
 
 // Comment - comment on an issue
 type Comment struct {
-	ID        string      `json:"id"`
+	ID        int64       `json:"id"`
 	Text      string      `json:"text"`
 	Author    UserRef     `json:"createdBy"`
 	CreatedAt TrackerTime `json:"createdAt"`

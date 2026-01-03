@@ -96,7 +96,10 @@ func (c *Client) FetchIssueComments(ctx context.Context, issueKey string) ([]Com
 			break
 		}
 
-		totalPagesInt, _ := strconv.Atoi(totalPages) // using Atoi because it's faster
+		totalPagesInt, err := strconv.Atoi(totalPages) // using Atoi because it's faster
+		if err != nil {
+			return allComments, fmt.Errorf("parse total pages: %w", err)
+		}
 		if page >= totalPagesInt {
 			break
 		}
