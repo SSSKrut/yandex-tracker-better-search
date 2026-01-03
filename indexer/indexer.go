@@ -211,6 +211,8 @@ type SearchResult struct {
 	Summary      string `json:"summary"`
 	StatusName   string `json:"status_name"`
 	AssigneeName string `json:"assignee_name"`
+	Queue        string `json:"queue"`
+	Priority     string `json:"priority"`
 	Highlight    string `json:"highlight"`
 }
 
@@ -282,4 +284,155 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// FilterOptions - available filter values
+type FilterOptions struct {
+	Queues     []string `json:"queues"`
+	Statuses   []string `json:"statuses"`
+	Priorities []string `json:"priorities"`
+	Authors    []string `json:"authors"`
+	Assignees  []string `json:"assignees"`
+}
+
+// GetFilterOptions - returns unique values for filters
+func (idx *Indexer) GetFilterOptions(ctx context.Context) (*FilterOptions, error) {
+	options := &FilterOptions{}
+
+	// Helper function to get distinct values
+	getDistinct := func(field string) ([]string, error) {
+		sql := fmt.Sprintf(`SELECT %s, COUNT(*) as cnt FROM %s GROUP BY %s ORDER BY cnt DESC LIMIT 100`, field, tableName, field)
+		req := idx.client.UtilsAPI.Sql(ctx).Body(sql)
+		resp, _, err := req.Execute()
+		if err != nil {
+			return nil, err
+		}
+
+		var values []string
+		if resp.ArrayOfMapmapOfStringAny != nil {
+			for _, queryResult := range *resp.ArrayOfMapmapOfStringAny {
+				if dataRows, ok := queryResult["data"].([]interface{}); ok {
+					for _, rowRaw := range dataRows {
+						if rowMap, ok := rowRaw.(map[string]interface{}); ok {
+							val := getStringFromMap(rowMap, field)
+							if val != "" {
+								values = append(values, val)
+							}
+						}
+					}
+				}
+			}
+		}
+		return values, nil
+	}
+
+	var err error
+	options.Queues, err = getDistinct("queue")
+	if err != nil {
+		log.Printf("Error getting queues: %v", err)
+	}
+
+	options.Statuses, err = getDistinct("status_name")
+	if err != nil {
+		log.Printf("Error getting statuses: %v", err)
+	}
+
+	options.Priorities, err = getDistinct("priority")
+	if err != nil {
+		log.Printf("Error getting priorities: %v", err)
+	}
+
+	options.Authors, err = getDistinct("author_name")
+	if err != nil {
+		log.Printf("Error getting authors: %v", err)
+	}
+
+	options.Assignees, err = getDistinct("assignee_name")
+	if err != nil {
+		log.Printf("Error getting assignees: %v", err)
+	}
+
+	return options, nil
+}
+
+// SearchFilters - filter parameters for search
+type SearchFilters struct {
+	Queue    string
+	Status   string
+	Priority string
+	Author   string
+	Assignee string
+}
+
+// SearchWithFilters - performs a full-text search query with filters
+func (idx *Indexer) SearchWithFilters(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// Build WHERE conditions
+	var conditions []string
+
+	// Add full-text search if query is provided
+	if query != "" {
+		escapedQuery := escapeQuery(query)
+		conditions = append(conditions, fmt.Sprintf("MATCH('%s')", escapedQuery))
+	}
+
+	// Add filter conditions
+	if filters.Queue != "" {
+		conditions = append(conditions, fmt.Sprintf("queue = '%s'", escapeSQL(filters.Queue)))
+	}
+	if filters.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("status_name = '%s'", escapeSQL(filters.Status)))
+	}
+	if filters.Priority != "" {
+		conditions = append(conditions, fmt.Sprintf("priority = '%s'", escapeSQL(filters.Priority)))
+	}
+	if filters.Author != "" {
+		conditions = append(conditions, fmt.Sprintf("author_name = '%s'", escapeSQL(filters.Author)))
+	}
+	if filters.Assignee != "" {
+		conditions = append(conditions, fmt.Sprintf("assignee_name = '%s'", escapeSQL(filters.Assignee)))
+	}
+
+	// Build the query
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	searchSQL := fmt.Sprintf(
+		`SELECT id, issue_key, url, summary, status_name, assignee_name, queue, priority,
+		        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'summary,description,comments_text') as highlight
+		 FROM %s 
+		 %s
+		 ORDER BY updated_at DESC
+		 LIMIT %d`,
+		tableName, whereClause, limit)
+
+	req := idx.client.UtilsAPI.Sql(ctx).Body(searchSQL)
+	resp, _, err := req.Execute()
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+
+	var results []SearchResult
+
+	if resp.ArrayOfMapmapOfStringAny != nil {
+		for _, queryResult := range *resp.ArrayOfMapmapOfStringAny {
+			if dataRows, ok := queryResult["data"].([]interface{}); ok {
+				for _, rowRaw := range dataRows {
+					if rowMap, ok := rowRaw.(map[string]interface{}); ok {
+						result := extractRow(rowMap)
+						result.Queue = getStringFromMap(rowMap, "queue")
+						result.Priority = getStringFromMap(rowMap, "priority")
+						results = append(results, result)
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
 }

@@ -3,6 +3,8 @@ package server
 import (
 	"log"
 	"net/http"
+
+	"ytbs/indexer"
 )
 
 // handleIndex - main page
@@ -12,10 +14,19 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load filter options
+	filterOptions, err := s.indexer.GetFilterOptions(r.Context())
+	if err != nil {
+		log.Printf("Error loading filter options: %v", err)
+		filterOptions = &indexer.FilterOptions{}
+	}
+
 	data := struct {
-		Status any
+		Status  any
+		Filters *indexer.FilterOptions
 	}{
-		Status: s.syncManager.GetStatus(),
+		Status:  s.syncManager.GetStatus(),
+		Filters: filterOptions,
 	}
 
 	s.templates.ExecuteTemplate(w, "index.html", data)
@@ -38,22 +49,37 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 
+	// Get filter parameters
+	filters := indexer.SearchFilters{
+		Queue:    r.URL.Query().Get("queue"),
+		Status:   r.URL.Query().Get("status"),
+		Priority: r.URL.Query().Get("priority"),
+		Author:   r.URL.Query().Get("author"),
+		Assignee: r.URL.Query().Get("assignee"),
+	}
+
 	// Unified data structure for template
 	data := struct {
 		Query   string
 		Results any
 		Count   int
 		Error   string
+		Filters indexer.SearchFilters
 	}{
-		Query: query,
+		Query:   query,
+		Filters: filters,
 	}
 
-	if query == "" {
+	// Check if we have any search criteria
+	hasFilters := filters.Queue != "" || filters.Status != "" || filters.Priority != "" ||
+		filters.Author != "" || filters.Assignee != ""
+
+	if query == "" && !hasFilters {
 		s.templates.ExecuteTemplate(w, "results.html", data)
 		return
 	}
 
-	results, err := s.indexer.Search(r.Context(), query, 50)
+	results, err := s.indexer.SearchWithFilters(r.Context(), query, filters, 50)
 	if err != nil {
 		data.Error = err.Error()
 		s.templates.ExecuteTemplate(w, "results.html", data)
@@ -63,7 +89,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	data.Results = results
 	data.Count = len(results)
-	log.Printf("Search query: %s, results: %d", query, len(results))
+	log.Printf("Search query: %q, filters: %+v, results: %d", query, filters, len(results))
 
 	if err := s.templates.ExecuteTemplate(w, "results.html", data); err != nil {
 		log.Printf("Template error: %v", err)

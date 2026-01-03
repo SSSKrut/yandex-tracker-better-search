@@ -95,7 +95,7 @@
 
         /* Main content */
         main {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 40px 20px;
         }
@@ -106,7 +106,7 @@
             border-radius: 24px;
             box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
             padding: 4px;
-            margin-bottom: 30px;
+            margin-bottom: 16px;
         }
 
         .search-form {
@@ -134,6 +134,155 @@
         .search-btn:hover {
             background: #f1f3f4;
             border-radius: 0 24px 24px 0;
+        }
+
+        /* Filters */
+        .filters-container {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .filters-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .filters-header:hover {
+            background: #f8f9fa;
+        }
+
+        .filters-header.active {
+            border-bottom-color: #e0e0e0;
+        }
+
+        .filters-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #444;
+        }
+
+        .filters-toggle {
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .filters-header.active .filters-toggle {
+            transform: rotate(180deg);
+        }
+
+        .filters-body {
+            display: none;
+            padding: 16px;
+        }
+
+        .filters-body.show {
+            display: block;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .filter-select:hover {
+            border-color: #1a73e8;
+        }
+
+        .filter-select:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+
+        .filter-select.has-value {
+            border-color: #1a73e8;
+            background: #e8f0fe;
+        }
+
+        .filters-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+        }
+
+        .btn-clear-filters {
+            padding: 6px 12px;
+            font-size: 13px;
+            color: #666;
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-clear-filters:hover {
+            background: #f1f3f4;
+            color: #333;
+        }
+
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-left: 12px;
+        }
+
+        .active-filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: #e8f0fe;
+            color: #1967d2;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .active-filter-tag .remove {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .active-filter-tag .remove:hover {
+            opacity: 1;
         }
 
         /* Results */
@@ -273,19 +422,85 @@
     </header>
 
     <main>
-        <div class="search-container">
-            <form class="search-form" hx-get="/api/search" hx-target="#results"
-                hx-trigger="submit, input changed delay:300ms from:#search-input">
-                <input type="text" id="search-input" name="q" class="search-input" placeholder="Поиск по задачам..."
-                    autocomplete="off" autofocus>
-                <button type="submit" class="search-btn">
-                    <span class="htmx-indicator">
-                        <div class="spinner"></div>
-                    </span>
-                    <span class="search-icon">🔍</span>
-                </button>
-            </form>
-        </div>
+        <form id="search-form" hx-get="/api/search" hx-target="#results"
+            hx-trigger="submit, input changed delay:300ms from:#search-input, change from:.filter-select">
+
+            <div class="search-container">
+                <div class="search-form">
+                    <input type="text" id="search-input" name="q" class="search-input" placeholder="Поиск по задачам..."
+                        autocomplete="off" autofocus>
+                    <button type="submit" class="search-btn">
+                        <span class="htmx-indicator">
+                            <div class="spinner"></div>
+                        </span>
+                        <span class="search-icon">🔍</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="filters-container">
+                <div class="filters-header" onclick="toggleFilters(this)">
+                    <div class="filters-title">
+                        <span>⚙️ Фильтры</span>
+                        <div class="active-filters" id="active-filters"></div>
+                    </div>
+                    <span class="filters-toggle">▼</span>
+                </div>
+                <div class="filters-body" id="filters-body">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label class="filter-label">Очередь</label>
+                            <select name="queue" class="filter-select" onchange="updateFilterStyle(this)">
+                                <option value="">Все очереди</option>
+                                {{range .Filters.Queues}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Статус</label>
+                            <select name="status" class="filter-select" onchange="updateFilterStyle(this)">
+                                <option value="">Все статусы</option>
+                                {{range .Filters.Statuses}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Приоритет</label>
+                            <select name="priority" class="filter-select" onchange="updateFilterStyle(this)">
+                                <option value="">Все приоритеты</option>
+                                {{range .Filters.Priorities}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Автор</label>
+                            <select name="author" class="filter-select" onchange="updateFilterStyle(this)">
+                                <option value="">Все авторы</option>
+                                {{range .Filters.Authors}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Исполнитель</label>
+                            <select name="assignee" class="filter-select" onchange="updateFilterStyle(this)">
+                                <option value="">Все исполнители</option>
+                                {{range .Filters.Assignees}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filters-actions">
+                        <button type="button" class="btn-clear-filters" onclick="clearFilters()">Сбросить
+                            фильтры</button>
+                    </div>
+                </div>
+            </div>
+        </form>
 
         <div id="results" class="results-container">
             <div class="empty-state">
@@ -294,6 +509,56 @@
             </div>
         </div>
     </main>
+
+    <script>
+        function toggleFilters(header) {
+            header.classList.toggle('active');
+            document.getElementById('filters-body').classList.toggle('show');
+        }
+
+        function updateFilterStyle(select) {
+            if (select.value) {
+                select.classList.add('has-value');
+            } else {
+                select.classList.remove('has-value');
+            }
+            updateActiveFiltersTags();
+        }
+
+        function updateActiveFiltersTags() {
+            const container = document.getElementById('active-filters');
+            const selects = document.querySelectorAll('.filter-select');
+            let tags = '';
+
+            selects.forEach(select => {
+                if (select.value) {
+                    const label = select.options[select.selectedIndex].text;
+                    tags += `<span class="active-filter-tag">${label} <span class="remove" onclick="clearFilter('${select.name}')">✕</span></span>`;
+                }
+            });
+
+            container.innerHTML = tags;
+        }
+
+        function clearFilter(name) {
+            const select = document.querySelector(`select[name="${name}"]`);
+            if (select) {
+                select.value = '';
+                select.classList.remove('has-value');
+                updateActiveFiltersTags();
+                htmx.trigger('#search-form', 'submit');
+            }
+        }
+
+        function clearFilters() {
+            document.querySelectorAll('.filter-select').forEach(select => {
+                select.value = '';
+                select.classList.remove('has-value');
+            });
+            updateActiveFiltersTags();
+            htmx.trigger('#search-form', 'submit');
+        }
+    </script>
 </body>
 
 </html>
