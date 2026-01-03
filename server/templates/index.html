@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Search</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        /* Header */
+        header {
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .sync-status {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .sync-status.syncing {
+            color: #1a73e8;
+        }
+
+        .sync-status.error {
+            color: #d93025;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1557b0;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f1f3f4;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e8eaed;
+        }
+
+        /* Main content */
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Search box */
+        .search-container {
+            background: #fff;
+            border-radius: 24px;
+            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+            padding: 4px;
+            margin-bottom: 30px;
+        }
+
+        .search-form {
+            display: flex;
+        }
+
+        .search-input {
+            flex: 1;
+            border: none;
+            padding: 14px 20px;
+            font-size: 16px;
+            outline: none;
+            border-radius: 24px;
+        }
+
+        .search-btn {
+            background: none;
+            border: none;
+            padding: 14px 20px;
+            cursor: pointer;
+            color: #1a73e8;
+            font-size: 16px;
+        }
+
+        .search-btn:hover {
+            background: #f1f3f4;
+            border-radius: 0 24px 24px 0;
+        }
+
+        /* Results */
+        .results-container {
+            min-height: 200px;
+        }
+
+        .results-info {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .result-item {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .result-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .result-key {
+            font-weight: 600;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .result-key:hover {
+            text-decoration: underline;
+        }
+
+        .result-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #e8f0fe;
+            color: #1967d2;
+        }
+
+        .result-title {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #202124;
+        }
+
+        .result-meta {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .result-highlight {
+            font-size: 14px;
+            color: #545454;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .result-highlight b {
+            background: #fff2cc;
+            padding: 0 2px;
+        }
+
+        /* Loading indicator */
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+
+        .htmx-indicator {
+            display: none;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #1a73e8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Error */
+        .error-message {
+            background: #fce8e6;
+            color: #c5221f;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <a href="/" class="logo">🔍 Yandex Tracker Better Search</a>
+        <div class="header-right">
+            <div id="sync-status" hx-get="/api/status"
+                hx-trigger="load, every 10s, sync-started from:body, sync-cancelled from:body">
+                {{template "status.html" .Status}}
+            </div>
+            <a href="/logs" class="btn btn-secondary">📋 Логи</a>
+        </div>
+    </header>
+
+    <main>
+        <div class="search-container">
+            <form class="search-form" hx-get="/api/search" hx-target="#results"
+                hx-trigger="submit, input changed delay:300ms from:#search-input">
+                <input type="text" id="search-input" name="q" class="search-input" placeholder="Поиск по задачам..."
+                    autocomplete="off" autofocus>
+                <button type="submit" class="search-btn">
+                    <span class="htmx-indicator">
+                        <div class="spinner"></div>
+                    </span>
+                    <span class="search-icon">🔍</span>
+                </button>
+            </form>
+        </div>
+
+        <div id="results" class="results-container">
+            <div class="empty-state">
+                <div class="empty-state-icon">🔎</div>
+                <p>Введите запрос для поиска по задачам</p>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>

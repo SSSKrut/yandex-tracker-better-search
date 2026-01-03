@@ -1,0 +1,4 @@
+github.com/manticoresoftware/manticoresearch-go v1.10.1-0.20251113092402-b8a6463603b5 h1:IV+8IYOhXqKi+qE0slhYhBwKuzzvdh/CajPTG1abAMc=
+github.com/manticoresoftware/manticoresearch-go v1.10.1-0.20251113092402-b8a6463603b5/go.mod h1:DWe7MH9o+tn+UjQMrR1prkpG/t0tlNa47H62heTnnBo=
+gopkg.in/validator.v2 v2.0.1 h1:xF0KWyGWXm/LM2G1TrEjqOu4pa6coO9AlWSf3msVfDY=
+gopkg.in/validator.v2 v2.0.1/go.mod h1:lIUZBlB3Im4s/eYp39Ry/wkR02yOPhZ9IwIRBjuPuG8=

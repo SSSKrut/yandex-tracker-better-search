@@ -1,0 +1,23 @@
+<div class="sync-status {{if .InProgress}}syncing{{else if .LastSyncError}}error{{end}}">
+    {{if .InProgress}}
+    <span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span>
+    Синхронизация...
+    <button class="btn btn-secondary" style="margin-left:8px;padding:4px 8px;" hx-delete="/api/sync"
+        hx-target="#sync-status" hx-swap="innerHTML">
+        ✕
+    </button>
+    {{else}}
+    {{if .LastSyncError}}
+    <span title="{{.LastSyncError}}">⚠️ Ошибка синхронизации</span>
+    {{else if not .LastSyncAt.IsZero}}
+    <span>✓ {{.IssuesCount}} задач</span>
+    <span style="margin-left:8px;color:#999;">{{timeAgo .LastSyncAt}}</span>
+    {{else}}
+    <span>Не синхронизировано</span>
+    {{end}}
+    <button class="btn btn-primary" style="margin-left:12px;padding:4px 12px;" hx-post="/api/sync"
+        hx-target="#sync-status" hx-swap="innerHTML">
+        🔄 Синхронизировать
+    </button>
+    {{end}}
+</div>

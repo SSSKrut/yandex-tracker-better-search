@@ -1,0 +1,38 @@
+{{if .Error}}
+<div class="error-message">
+    ⚠️ Ошибка поиска: {{.Error}}
+</div>
+{{else if .Results}}
+<div class="results-info">
+    Найдено результатов: {{.Count}} по запросу «{{.Query}}»
+</div>
+
+{{range .Results}}
+<div class="result-item">
+    <div class="result-header">
+        <a href="{{.URL}}" target="_blank" class="result-key">{{.Key}}</a>
+        {{if .StatusName}}
+        <span class="result-status">{{.StatusName}}</span>
+        {{end}}
+    </div>
+    <div class="result-title">{{.Summary}}</div>
+    <div class="result-meta">
+        {{if .AssigneeName}}Исполнитель: {{.AssigneeName}}{{else}}Не назначен{{end}}
+    </div>
+    {{if .Highlight}}
+    <div class="result-highlight">{{.Highlight | safeHTML}}</div>
+    {{end}}
+</div>
+{{end}}
+
+{{else if .Query}}
+<div class="empty-state">
+    <div class="empty-state-icon">😕</div>
+    <p>По запросу «{{.Query}}» ничего не найдено</p>
+</div>
+{{else}}
+<div class="empty-state">
+    <div class="empty-state-icon">🔎</div>
+    <p>Введите запрос для поиска по задачам</p>
+</div>
+{{end}}
