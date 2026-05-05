@@ -43,8 +43,14 @@ Examples:
 		log.Printf("Found %d results:\n", len(results))
 
 		for i, r := range results {
-			fmt.Printf("%d. [%s] %s\n", i+1, r.Key, r.Summary)
-			fmt.Printf("   Status: %s | Assignee: %s\n", r.StatusName, r.AssigneeName)
+			if r.Kind == "file" {
+				fmt.Printf("%d. [FILE:%s] %s\n", i+1, r.Key, r.FileName)
+				fmt.Printf("   MIME: %s | Size: %d | Source: %s\n", r.MimeType, r.Size, r.Source)
+				fmt.Printf("   Parent issue: %s\n", r.Key)
+			} else {
+				fmt.Printf("%d. [%s] %s\n", i+1, r.Key, r.Summary)
+				fmt.Printf("   Status: %s | Assignee: %s\n", r.StatusName, r.AssigneeName)
+			}
 			fmt.Printf("   URL: %s\n", r.URL)
 			if r.Highlight != "" {
 				fmt.Printf("   Match: %s\n", r.Highlight)

@@ -10,7 +10,7 @@
     {{if .LastSyncError}}
     <span title="{{.LastSyncError}}">⚠️ Ошибка синхронизации</span>
     {{else if not .LastSyncAt.IsZero}}
-    <span>✓ {{.IssuesCount}} задач</span>
+    <span>✓ {{.IssuesCount}} задач, {{.FilesCount}} файлов (текстовых: {{.TextFiles}})</span>
     <span style="margin-left:8px;color:#999;">{{timeAgo .LastSyncAt}}</span>
     {{else}}
     <span>Не синхронизировано</span>

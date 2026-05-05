@@ -46,6 +46,7 @@ type Issue struct {
 	Key         string         `json:"key"`
 	Summary     string         `json:"summary"`
 	Description string         `json:"description"`
+	Attachments []Attachment   `json:"attachments"`
 	Queue       QueueRef       `json:"queue"`
 	Status      StatusRef      `json:"status"`
 	Priority    PriorityRef    `json:"priority"`
@@ -62,11 +63,24 @@ type Issue struct {
 
 // Comment - comment on an issue
 type Comment struct {
-	ID        int64       `json:"id"`
-	Text      string      `json:"text"`
-	Author    UserRef     `json:"createdBy"`
+	ID          int64        `json:"id"`
+	Text        string       `json:"text"`
+	Attachments []Attachment `json:"attachments"`
+	Author      UserRef      `json:"createdBy"`
+	CreatedAt   TrackerTime  `json:"createdAt"`
+	UpdatedAt   TrackerTime  `json:"updatedAt"`
+}
+
+// Attachment - file attached to issue/comment
+type Attachment struct {
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Content   string      `json:"content"`
+	Self      string      `json:"self"`
+	MimeType  string      `json:"mimeType"`
+	Size      int64       `json:"size"`
+	CreatedBy UserRef     `json:"createdBy"`
 	CreatedAt TrackerTime `json:"createdAt"`
-	UpdatedAt TrackerTime `json:"updatedAt"`
 }
 
 // UserRef - user reference

@@ -36,26 +36,43 @@ type IndexedIssue struct {
 type SyncResult struct {
 	TotalIssues   int
 	TotalComments int
+	TotalFiles    int
+	TextFiles     int
 	ProcessedAt   time.Time
+	MaxUpdatedAt  time.Time
 	Errors        []error
 }
 
 // InitialSync - performs the initial synchronization: fetches all issues and their comments
-func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) ([]IndexedIssue, *SyncResult, error) {
-	result := &SyncResult{
-		ProcessedAt: time.Now(),
-	}
-
-	// 1. Load all issues
-	log.Println("Starting initial sync...")
+func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	log.Println("Starting full sync...")
 	issues, err := c.FetchAllIssues(ctx, queues)
 	if err != nil {
-		return nil, result, err
+		return nil, nil, &SyncResult{ProcessedAt: time.Now()}, err
 	}
+
+	return c.buildIndexed(ctx, issues, workers)
+}
+
+// IncrementalSync - performs synchronization for issues updated since a timestamp
+func (c *Client) IncrementalSync(ctx context.Context, since time.Time, queues []string, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	log.Printf("Starting incremental sync since %s...", since.Format("2006-01-02 15:04:05"))
+	issues, err := c.FetchUpdatedIssues(ctx, since, queues)
+	if err != nil {
+		return nil, nil, &SyncResult{ProcessedAt: time.Now()}, err
+	}
+	return c.buildIndexed(ctx, issues, workers)
+}
+
+func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	result := &SyncResult{ProcessedAt: time.Now()}
 	result.TotalIssues = len(issues)
+	if len(issues) == 0 {
+		return nil, nil, result, nil
+	}
+
 	log.Printf("Fetched %d issues, loading comments...", len(issues))
 
-	// 2. Load comments for issues with concurrency
 	if workers <= 0 {
 		workers = 5
 	}
@@ -63,6 +80,8 @@ func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) 
 	type issueWithComments struct {
 		issue    Issue
 		comments []Comment
+		files    []IndexedFile
+		errors   []error
 		err      error
 	}
 
@@ -76,9 +95,12 @@ func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) 
 			defer wg.Done()
 			for issue := range jobs {
 				comments, err := c.FetchIssueComments(ctx, issue.Key)
+				files, fileErrors := c.extractIndexedFilesForIssue(ctx, issue, comments)
 				results <- issueWithComments{
 					issue:    issue,
 					comments: comments,
+					files:    files,
+					errors:   fileErrors,
 					err:      err,
 				}
 			}
@@ -97,8 +119,8 @@ func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) 
 		close(results)
 	}()
 
-	// 3. Collect results and convert to IndexedIssue
 	var indexed []IndexedIssue
+	var indexedFiles []IndexedFile
 	processed := 0
 
 	for r := range results {
@@ -112,15 +134,31 @@ func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) 
 			log.Printf("Error fetching comments for issue %s: %v", r.issue.Key, r.err)
 		}
 
+		if len(r.errors) > 0 {
+			result.Errors = append(result.Errors, r.errors...)
+		}
+
+		if r.issue.UpdatedAt.Time.After(result.MaxUpdatedAt) {
+			result.MaxUpdatedAt = r.issue.UpdatedAt.Time
+		}
+
 		result.TotalComments += len(r.comments)
+		result.TotalFiles += len(r.files)
+
+		for _, file := range r.files {
+			if file.IsText {
+				result.TextFiles++
+			}
+		}
 
 		indexed = append(indexed, convertToIndexed(r.issue, r.comments))
+		indexedFiles = append(indexedFiles, r.files...)
 	}
 
-	log.Printf("Initial sync completed: %d issues, %d comments, %d errors",
-		result.TotalIssues, result.TotalComments, len(result.Errors))
+	log.Printf("Sync completed: %d issues, %d comments, %d files (%d text), %d errors",
+		result.TotalIssues, result.TotalComments, result.TotalFiles, result.TextFiles, len(result.Errors))
 
-	return indexed, result, nil
+	return indexed, indexedFiles, result, nil
 }
 
 // convertToIndexed - converts Issue and its comments to IndexedIssue

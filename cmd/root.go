@@ -90,6 +90,7 @@ Environment Variables:
   TRACKER_OAUTH_TOKEN   OAuth token for Yandex Tracker (required)
   TRACKER_CLOUD_ORG_ID  Cloud Organization ID (required)
   MANTICORE_URL         Manticore Search URL (default: http://localhost:9308)
+	ATTACHMENT_TEXT_MAX_BYTES  Max size in bytes for downloading/indexing text attachments (default: 2097152)
 
 Use "{{.CommandPath}} [command] --help" for more information about a command.
 `)

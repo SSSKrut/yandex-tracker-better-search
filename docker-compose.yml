@@ -9,5 +9,19 @@ services:
     volumes:
       - manticore_data:/var/lib/manticore
 
+  ytbs:
+    build: .
+    depends_on:
+      - manticore
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - MANTICORE_URL=http://manticore:9308
+      - SYNC_STATE_PATH=/app/backups/sync_state.json
+    volumes:
+      - ./backups:/app/backups
+
 volumes:
   manticore_data:

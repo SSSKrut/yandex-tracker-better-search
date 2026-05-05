@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Map</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        header {
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f1f3f4;
+            color: #333;
+        }
+
+        .btn:hover {
+            background: #e8eaed;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+        }
+
+        .map-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 16px;
+            min-height: 70vh;
+        }
+
+        .panel {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-height: 70vh;
+            overflow: auto;
+        }
+
+        .panel h2 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .stats {
+            display: grid;
+            gap: 8px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+
+        .selected-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px;
+            background: #fafafa;
+            display: grid;
+            gap: 6px;
+            font-size: 13px;
+            max-height: 220px;
+            overflow: auto;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .selected-card a {
+            color: #1a73e8;
+            text-decoration: none;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .selected-card a:hover {
+            text-decoration: underline;
+        }
+
+        .neighbors {
+            display: grid;
+            gap: 6px;
+        }
+
+        .neighbor-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: #f1f3f4;
+            gap: 8px;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .neighbor-score {
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .neighbor-item a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .map-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 12px;
+            position: relative;
+            height: 70vh;
+        }
+
+        #map-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+
+        .map-card .loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #666;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend i {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        @media (max-width: 900px) {
+            .map-layout {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                padding: 16px;
+            }
+
+            .map-card {
+                min-height: 60vh;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <a href="/" class="logo">🗺️ Tracker Map</a>
+        <div class="header-right">
+            <a href="/" class="btn">🔍 Поиск</a>
+            <a href="/logs" class="btn">📋 Логи</a>
+        </div>
+    </header>
+
+    <main>
+        <div class="map-layout">
+            <div class="panel">
+                <div>
+                    <h2>Карта схожести</h2>
+                    <div class="stats" id="stats">Загрузка...</div>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Найти по ключу или названию">
+                </div>
+                <div>
+                    <h2>Выбранный элемент</h2>
+                    <div class="selected-card" id="selected-card">Нажмите на точку на карте</div>
+                </div>
+                <div>
+                    <h2>Похожие элементы</h2>
+                    <div class="neighbors" id="neighbors">-</div>
+                </div>
+                <div>
+                    <h2>Легенда</h2>
+                    <div class="legend" id="legend"></div>
+                </div>
+            </div>
+            <div class="map-card">
+                <canvas id="map-canvas"></canvas>
+                <div class="loading" id="map-loading">Строим карту...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('map-canvas');
+        const ctx = canvas.getContext('2d');
+        const statsEl = document.getElementById('stats');
+        const loadingEl = document.getElementById('map-loading');
+        const selectedEl = document.getElementById('selected-card');
+        const neighborsEl = document.getElementById('neighbors');
+        const searchInput = document.getElementById('search-input');
+        const legendEl = document.getElementById('legend');
+
+        const palette = [
+            '#1a73e8', '#e37400', '#1e8e3e', '#d93025', '#9334e6',
+            '#188038', '#c5221f', '#5f6368', '#0b8043', '#f9ab00'
+        ];
+
+        let mapData = null;
+        let points = [];
+        let pointIndex = {};
+        let bounds = null;
+        let zoom = 1;
+        let pan = { x: 0, y: 0 };
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragMoved = false;
+        let baseScale = 1;
+        const padding = 24;
+        let selectedId = null;
+        let searchTerm = '';
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            updateBaseScale();
+            render();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function fetchMap() {
+            fetch('/api/map')
+                .then(resp => resp.json())
+                .then(data => {
+                    mapData = data;
+                    points = data.points || [];
+                    pointIndex = {};
+                    points.forEach(p => {
+                        pointIndex[p.id] = p;
+                    });
+                    bounds = computeBounds(points);
+                    normalizePoints();
+                    zoom = 1;
+                    pan = { x: 0, y: 0 };
+                    updateStats(data);
+                    updateLegend(data);
+                    loadingEl.style.display = 'none';
+                    resizeCanvas();
+                })
+                .catch(err => {
+                    loadingEl.textContent = 'Ошибка загрузки карты';
+                    console.error(err);
+                });
+        }
+
+        function computeBounds(points) {
+            const xs = points.map(p => p.x);
+            const ys = points.map(p => p.y);
+            const minX = Math.min(...xs, 0);
+            const maxX = Math.max(...xs, 1);
+            const minY = Math.min(...ys, 0);
+            const maxY = Math.max(...ys, 1);
+            return { minX, maxX, minY, maxY };
+        }
+
+        function normalizePoints() {
+            if (!bounds) return;
+            const rangeX = bounds.maxX - bounds.minX || 1;
+            const rangeY = bounds.maxY - bounds.minY || 1;
+            points.forEach(p => {
+                p._nx = (p.x - bounds.minX) / rangeX;
+                p._ny = (p.y - bounds.minY) / rangeY;
+            });
+        }
+
+        function updateBaseScale() {
+            baseScale = Math.max(1, Math.min(canvas.width, canvas.height) - padding * 2);
+        }
+
+        function toScreen(p) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const x = centerX + pan.x + (p._nx - 0.5) * baseScale * zoom;
+            const y = centerY + pan.y + (p._ny - 0.5) * baseScale * zoom;
+            return { x, y };
+        }
+
+        function screenToNormalized(x, y) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const nx = ((x - centerX - pan.x) / (baseScale * zoom)) + 0.5;
+            const ny = ((y - centerY - pan.y) / (baseScale * zoom)) + 0.5;
+            return { nx, ny };
+        }
+
+        function render() {
+            if (!points.length) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            points.forEach(p => {
+                const pos = toScreen(p);
+                const highlight = selectedId === p.id;
+                const isMatch = searchTerm && matchesSearch(p, searchTerm);
+                const radius = highlight ? 6 : isMatch ? 5 : 3;
+                const color = palette[p.cluster % palette.length] || '#666';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = highlight ? '#000' : color;
+                ctx.globalAlpha = isMatch || !searchTerm ? 0.9 : 0.2;
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function updateStats(data) {
+            const stats = data.stats || {};
+            statsEl.innerHTML = `
+                <div>Задач: <strong>${stats.issues || 0}</strong></div>
+                <div>Файлов: <strong>${stats.files || 0}</strong></div>
+                <div>Точек: <strong>${stats.points || 0}</strong></div>
+                <div>Кластеров: <strong>${stats.clusters || 0}</strong></div>
+            `;
+        }
+
+        function updateLegend(data) {
+            const clusters = data.stats ? data.stats.clusters : 0;
+            legendEl.innerHTML = '';
+            for (let i = 0; i < clusters; i++) {
+                const entry = document.createElement('span');
+                const dot = document.createElement('i');
+                dot.style.background = palette[i % palette.length];
+                entry.appendChild(dot);
+                entry.appendChild(document.createTextNode(`Кластер ${i + 1}`));
+                legendEl.appendChild(entry);
+            }
+        }
+
+        function setSelected(point) {
+            if (!point) return;
+            selectedId = point.id;
+            selectedEl.innerHTML = `
+                <div><strong>${point.title || point.key}</strong></div>
+                <div>Тип: ${point.kind === 'file' ? 'Файл' : 'Задача'}</div>
+                <div>Ключ: ${point.key || '-'}</div>
+                <div><a href="${point.url}" target="_blank">Открыть</a></div>
+                ${point.parent_issue_url ? `<div><a href="${point.parent_issue_url}" target="_blank">Родительская задача</a></div>` : ''}
+            `;
+
+            neighborsEl.innerHTML = '';
+            if (!point.neighbors || point.neighbors.length === 0) {
+                neighborsEl.textContent = '-';
+            } else {
+                point.neighbors.forEach(n => {
+                    const neighbor = pointIndex[n.id];
+                    if (!neighbor) return;
+                    const item = document.createElement('div');
+                    item.className = 'neighbor-item';
+                    item.innerHTML = `
+                        <a href="${neighbor.url}" target="_blank">${neighbor.title || neighbor.key}</a>
+                        <span class="neighbor-score">${n.score.toFixed(2)}</span>
+                    `;
+                    item.addEventListener('click', () => {
+                        setSelected(neighbor);
+                        render();
+                    });
+                    neighborsEl.appendChild(item);
+                });
+            }
+            render();
+        }
+
+        function matchesSearch(point, term) {
+            const haystack = `${point.key || ''} ${point.title || ''}`.toLowerCase();
+            return haystack.includes(term.toLowerCase());
+        }
+
+        function pickPointAt(x, y) {
+            if (!points.length) return null;
+            let best = null;
+            let bestDist = 12;
+            points.forEach(p => {
+                const pos = toScreen(p);
+                const dx = pos.x - x;
+                const dy = pos.y - y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = p;
+                }
+            });
+            return best;
+        }
+
+        canvas.addEventListener('mousedown', (event) => {
+            isDragging = true;
+            dragMoved = false;
+            dragStart = { x: event.clientX, y: event.clientY };
+            canvas.style.cursor = 'grabbing';
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (!isDragging) return;
+            const dx = event.clientX - dragStart.x;
+            const dy = event.clientY - dragStart.y;
+            if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
+                dragMoved = true;
+            }
+            pan.x += dx;
+            pan.y += dy;
+            dragStart = { x: event.clientX, y: event.clientY };
+            render();
+        });
+
+        canvas.addEventListener('mouseup', (event) => {
+            if (!isDragging) return;
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+            if (!dragMoved) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                const best = pickPointAt(x, y);
+                if (best) {
+                    setSelected(best);
+                }
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (isDragging) {
+                isDragging = false;
+                canvas.style.cursor = 'grab';
+            }
+        });
+
+        canvas.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const before = screenToNormalized(x, y);
+            const factor = event.deltaY > 0 ? 0.9 : 1.1;
+            const nextZoom = Math.min(6, Math.max(0.4, zoom * factor));
+            zoom = nextZoom;
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            pan.x = x - centerX - (before.nx - 0.5) * baseScale * zoom;
+            pan.y = y - centerY - (before.ny - 0.5) * baseScale * zoom;
+
+            render();
+        }, { passive: false });
+
+        searchInput.addEventListener('input', (event) => {
+            searchTerm = event.target.value.trim();
+            render();
+        });
+
+        fetchMap();
+    </script>
+</body>
+
+</html>

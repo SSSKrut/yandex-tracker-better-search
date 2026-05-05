@@ -10,14 +10,27 @@
 {{range .Results}}
 <div class="result-item">
     <div class="result-header">
-        <a href="{{.URL}}" target="_blank" class="result-key">{{.Key}}</a>
+        <a href="{{.URL}}" target="_blank" class="result-key">{{if eq .Kind "file"}}📎 ФАЙЛ{{else}}{{.Key}}{{end}}</a>
         {{if .StatusName}}
         <span class="result-status">{{.StatusName}}</span>
         {{end}}
     </div>
-    <div class="result-title">{{.Summary}}</div>
+    <div class="result-title">
+        {{if eq .Kind "file"}}
+        {{.FileName}}
+        {{else}}
+        {{.Summary}}
+        {{end}}
+    </div>
     <div class="result-meta">
+        {{if eq .Kind "file"}}
+        Задача: <a href="{{.ParentIssueURL}}" target="_blank">{{.Key}}</a>
+        {{if .MimeType}} • MIME: {{.MimeType}}{{end}}
+        {{if gt .Size 0}} • Размер: {{.Size}} байт{{end}}
+        {{if .Source}} • Источник: {{.Source}}{{end}}
+        {{else}}
         {{if .AssigneeName}}Исполнитель: {{.AssigneeName}}{{else}}Не назначен{{end}}
+        {{end}}
     </div>
     {{if .Highlight}}
     <div class="result-highlight">{{.Highlight | safeHTML}}</div>

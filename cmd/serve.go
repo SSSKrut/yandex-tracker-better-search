@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	serveAddr     string
-	serveInterval time.Duration
+	serveAddr         string
+	serveInterval     time.Duration
+	serveFullInterval time.Duration
 )
 
 var serveCmd = &cobra.Command{
@@ -36,6 +37,7 @@ Provides web interface for:
 			nil, // queues (nil = all)
 			5,   // workers
 			serveInterval,
+			serveFullInterval,
 		)
 
 		// Background sync at startup
@@ -46,14 +48,15 @@ Provides web interface for:
 			return err
 		}
 
-		log.Printf("Starting server on %s (sync every %s)", serveAddr, serveInterval)
+		log.Printf("Starting server on %s (incremental: %s, full: %s)", serveAddr, serveInterval, serveFullInterval)
 		return srv.Start(GetContext())
 	},
 }
 
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":8080", "HTTP server address")
-	serveCmd.Flags().DurationVarP(&serveInterval, "interval", "i", 15*time.Minute, "Sync interval (e.g. 10m, 1h, 30s)")
+	serveCmd.Flags().DurationVarP(&serveInterval, "interval", "i", 15*time.Minute, "Incremental sync interval (e.g. 10m, 1h, 30s)")
+	serveCmd.Flags().DurationVar(&serveFullInterval, "full-interval", 24*time.Hour, "Full sync interval (e.g. 24h)")
 
 	rootCmd.AddCommand(serveCmd)
 }

@@ -33,7 +33,7 @@ Performs a complete sync of:
 			log.Println("Syncing all accessible queues")
 		}
 
-		issues, result, err := client.InitialSync(GetContext(), syncQueues, syncWorkers)
+		issues, files, result, err := client.InitialSync(GetContext(), syncQueues, syncWorkers)
 		if err != nil {
 			return err
 		}
@@ -41,6 +41,7 @@ Performs a complete sync of:
 		log.Printf("Fetched from Tracker:")
 		log.Printf("  Issues:   %d", result.TotalIssues)
 		log.Printf("  Comments: %d", result.TotalComments)
+		log.Printf("  Files:    %d (text: %d)", result.TotalFiles, result.TextFiles)
 		log.Printf("  Errors:   %d", len(result.Errors))
 
 		if len(result.Errors) > 0 {
@@ -52,6 +53,9 @@ Performs a complete sync of:
 
 		log.Println("\nIndexing into Manticore...")
 		if err := GetIndexer().IndexIssues(GetContext(), issues); err != nil {
+			return err
+		}
+		if err := GetIndexer().IndexFiles(GetContext(), files); err != nil {
 			return err
 		}
 

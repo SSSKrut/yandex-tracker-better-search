@@ -1,8 +1,13 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"ytbs/indexer"
 )
@@ -43,6 +48,70 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.templates.ExecuteTemplate(w, "logs.html", data)
+}
+
+// handleMap - map visualization page
+func (s *Server) handleMap(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		Status any
+	}{
+		Status: s.syncManager.GetStatus(),
+	}
+
+	s.templates.ExecuteTemplate(w, "map.html", data)
+}
+
+// handleMapData - map data API
+func (s *Server) handleMapData(w http.ResponseWriter, r *http.Request) {
+	refresh := r.URL.Query().Get("refresh") == "1"
+	cacheTTL := mapCacheTTL()
+
+	if !refresh {
+		s.mapCacheMu.Lock()
+		cached := s.mapCache
+		cachedAt := s.mapCacheAt
+		s.mapCacheMu.Unlock()
+		if cached != nil && time.Since(cachedAt) < cacheTTL {
+			writeJSON(w, cached)
+			return
+		}
+	}
+
+	data, err := s.indexer.BuildSimilarityMap(r.Context(), indexer.MapOptionsFromEnv())
+	if err != nil {
+		log.Printf("Map build error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.mapCacheMu.Lock()
+	s.mapCache = data
+	s.mapCacheAt = time.Now()
+	s.mapCacheMu.Unlock()
+
+	writeJSON(w, data)
+}
+
+func writeJSON(w http.ResponseWriter, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(payload); err != nil {
+		log.Printf("JSON encode error: %v", err)
+	}
+}
+
+func mapCacheTTL() time.Duration {
+	const defaultMinutes = 10
+	val := strings.TrimSpace(os.Getenv("MAP_CACHE_MINUTES"))
+	if val == "" {
+		return time.Duration(defaultMinutes) * time.Minute
+	}
+	parsed, err := strconv.Atoi(val)
+	if err != nil || parsed <= 0 {
+		return time.Duration(defaultMinutes) * time.Minute
+	}
+	return time.Duration(parsed) * time.Minute
 }
 
 // handleSearch - search API (htmx)
