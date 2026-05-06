@@ -20,6 +20,7 @@ services:
     environment:
       - MANTICORE_URL=http://manticore:9308
       - SYNC_STATE_PATH=/app/backups/sync_state.json
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
     volumes:
       - ./backups:/app/backups
 

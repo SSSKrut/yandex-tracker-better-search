@@ -1,0 +1,84 @@
+version: 2
+
+project_name: ytbs
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ytbs
+    main: ./
+    binary: ytbs
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X ytbs/cmd.version={{.Version}}
+      - -X ytbs/cmd.commit={{.Commit}}
+      - -X ytbs/cmd.date={{.CommitDate}}
+
+archives:
+  - id: default
+    name_template: "ytbs_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - .env.example
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## ytbs {{ .Tag }}
+
+    Self-hosted полнотекстовый поиск по Яндекс Трекеру с MCP-сервером для агентов.
+    Скачайте архив под свою OS/arch, распакуйте, положите `ytbs` в `$PATH`.
+  footer: |
+    **Контейнер:** `docker compose up --build` (см. README).

@@ -1,52 +1,139 @@
 # YTBS - Yandex Tracker Better Search
 
-Удобный селф-хостед сервис поиска задач из вашего Яндекс Трекера. 
+Удобный селф-хостед сервис поиска задач из вашего Яндекс Трекера.
 
-## Docker quick start
+Поддерживается два сценария: **локальный** (всё крутится у вас на машине)
+и **командный** (один общий деплой в компании, остальные подключаются
+по сети, без установки чего-либо у себя).
 
-1. Создайте `.env` файл:
+## Локальный запуск (для одного человека)
 
-```
-TRACKER_OAUTH_TOKEN=your_token
-TRACKER_CLOUD_ORG_ID=your_org_id
-```
+Подходит, если вы хотите пользоваться поиском сами или подключить MCP к своему
+Claude Code / Cursor / другому клиенту со своей машины.
 
-2. Запустите контейнер:
+1. Создайте `.env` (за основу - `.env.example`):
 
-```
-docker compose up --build
-```
+   ```
+   TRACKER_OAUTH_TOKEN=your_token
+   TRACKER_CLOUD_ORG_ID=your_org_id
+   ```
 
-UI будет доступен на `http://localhost:8080`.
+   `MCP_AUTH_TOKEN` оставьте пустым - на loopback эндпоинт всё равно открыт только
+   для вас.
 
-## MCP server (для агентов)
+2. Запустите контейнеры:
 
-`ytbs mcp` поднимает MCP-сервер по stdio с шестью тулами и ресурс-шаблоном
-`tracker://issue/{key}`:
+   ```
+   docker compose up --build
+   ```
+
+   - UI: <http://localhost:8080>
+   - MCP HTTP: <http://localhost:8080/mcp>
+
+3. Подключите MCP-клиент. Два варианта (выбирайте любой):
+
+   **stdio** - клиент сам запускает `ytbs` как сабпроцесс:
+   ```json
+   {
+     "mcpServers": {
+       "ytbs": {
+         "command": "/path/to/ytbs",
+         "args": ["mcp"],
+         "env": { "MANTICORE_URL": "http://localhost:9308" }
+       }
+     }
+   }
+   ```
+
+   **HTTP** - клиент ходит на уже запущенный `ytbs serve`:
+   ```json
+   {
+     "mcpServers": {
+       "ytbs": {
+         "url": "http://localhost:8080/mcp"
+       }
+     }
+   }
+   ```
+
+## Командный запуск (один деплой на компанию)
+
+Вариант, если вы хотите развернуть сервис где-то на сервере, и подключаться к нему по URL без локальных зависимостей, токена трекера и Manticore.
+
+1. На сервере создайте `.env`:
+
+   ```
+   TRACKER_OAUTH_TOKEN=service_account_token
+   TRACKER_CLOUD_ORG_ID=your_org_id
+
+   # Обязательно: эндпоинт /mcp иначе будет открыт всем, кто видит порт 8080.
+   MCP_AUTH_TOKEN=<любой_достаточно_длинный_секрет>
+   ```
+
+   Секрет можно сгенерировать, например, через `openssl rand -hex 32`.
+
+2. Запустите `docker compose up -d --build`. Поставьте перед сервисом reverse-proxy
+   с TLS (nginx/caddy/Traefik) - приложение слушает по HTTP.
+
+3. Раздайте пользователям URL и токен. У каждого в конфиге MCP-клиента:
+
+   ```json
+   {
+     "mcpServers": {
+       "ytbs": {
+         "url": "https://ytbs.company.internal/mcp",
+         "headers": { "Authorization": "Bearer <тот_же_секрет>" }
+       }
+     }
+   }
+   ```
+
+   Локально у пользователя ничего ставить не нужно.
+
+## MCP-инструменты
+
+`ytbs mcp` (stdio) и `/mcp` (HTTP) предоставляют один и тот же набор:
 
 | Tool | Назначение |
 |------|------------|
 | `search_tasks` | full-text поиск с фильтрами (assignee, status, queue, ...) |
-| `get_task` | полный issue + комменты + аттачи. `full=true` — без обрезки |
+| `get_task` | полная задача + комменты + вложенные файлы. `full=true` - без обрезки |
 | `get_nearest_neighbors` | соседи в LSA-карте (похожие задачи) |
 | `get_map_overview` | кластеры с top-keywords и центральными задачами |
 | `trigger_sync` | запустить синк (`incremental`/`full`) |
 | `get_status` | текущий статус и времена синков |
 
-Подключить к Claude Code или другому MCP-клиенту — добавить в `~/.claude.json`
-(или в per-project `.claude/mcp.json`):
+Плюс ресурс-шаблон `tracker://issue/{key}`.
 
-```json
-{
-  "mcpServers": {
-    "ytbs": {
-      "command": "/path/to/ytbs",
-      "args": ["mcp"],
-      "env": { "MANTICORE_URL": "http://localhost:9308" }
-    }
-  }
-}
+`TRACKER_OAUTH_TOKEN` и `TRACKER_CLOUD_ORG_ID` нужны только если клиент вызывает
+`trigger_sync`. Для read-only сценариев их можно не передавать.
+
+## Установка из релизов
+
+В дополнение к `docker compose` можно скачать готовый бинарь с
+[Releases](../../releases) — собран под `linux/darwin/windows × amd64/arm64`,
+без зависимостей. Бинарю всё ещё нужен запущенный Manticore по `MANTICORE_URL`
+(проще всего поднять через `docker compose up manticore`).
+
+```sh
+curl -L https://github.com/<owner>/<repo>/releases/latest/download/ytbs_<version>_linux_amd64.tar.gz | tar xz
+./ytbs serve
 ```
 
-`TRACKER_OAUTH_TOKEN` и `TRACKER_CLOUD_ORG_ID` нужны только если осуществляется вызов
-`trigger_sync`; для read-only сценариев (например, когда агент смотрит задачи локально) их можно не передавать.
+## Переменные окружения
+
+| Переменная | Назначение | Default |
+|------------|------------|---------|
+| `TRACKER_OAUTH_TOKEN` | OAuth-токен для Yandex Tracker v3 | - (нужен для `serve`/`sync`) |
+| `TRACKER_CLOUD_ORG_ID` | Cloud Organization ID, шлётся как `X-Cloud-Org-ID` | - (нужен для `serve`/`sync`) |
+| `MANTICORE_URL` | HTTP API Manticore | `http://localhost:9308` |
+| `MCP_AUTH_TOKEN` | Bearer-токен для `/mcp`. Пусто = эндпоинт открыт | пусто |
+| `SYNC_STATE_PATH` | где хранится стейт последнего синка | `backups/sync_state.json` |
+| `ATTACHMENT_TEXT_MAX_BYTES` | лимит на размер скачиваемых текстовых файлов | `2097152` |
+
+
+## Contribute
+
+Тег вида `vX.Y.Z` в репозитории автоматически триггерит CI, который через goreleaser
+собирает архивы и публикует их в Releases.
+Все остальное - по ишус, с соблюдением гошных практик.

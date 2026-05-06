@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"log"
+	"os"
+	"strings"
 	"time"
 
+	ytbsmcp "ytbs/mcp"
 	"ytbs/searchapi"
 	"ytbs/server"
 	"ytbs/sync"
@@ -47,7 +50,14 @@ Provides web interface for:
 		go syncMgr.Start(GetContext())
 
 		api := searchapi.NewService(GetIndexer(), syncMgr)
-		srv, err := server.NewServer(serveAddr, api)
+
+		mcpToken := os.Getenv("MCP_AUTH_TOKEN")
+		mcpHandler := ytbsmcp.NewHTTPHandler(api, mcpToken)
+		if mcpToken == "" && !isLoopback(serveAddr) {
+			log.Printf("warning: MCP endpoint /mcp is unauthenticated; set MCP_AUTH_TOKEN to require Bearer auth")
+		}
+
+		srv, err := server.NewServer(serveAddr, api, mcpHandler)
 		if err != nil {
 			return err
 		}
@@ -63,4 +73,16 @@ func init() {
 	serveCmd.Flags().DurationVar(&serveFullInterval, "full-interval", 24*time.Hour, "Full sync interval (e.g. 24h)")
 
 	rootCmd.AddCommand(serveCmd)
+}
+
+func isLoopback(addr string) bool {
+	host := addr
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		host = addr[:i]
+	}
+	switch host {
+	case "", "127.0.0.1", "::1", "localhost":
+		return true
+	}
+	return false
 }

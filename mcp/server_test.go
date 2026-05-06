@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"testing"
 
@@ -84,6 +86,52 @@ func TestServer_RegistersExpectedTools(t *testing.T) {
 		if gotReadOnly != want {
 			t.Fatalf("tool %s ReadOnlyHint = %v, want %v", tool.Name, gotReadOnly, want)
 		}
+	}
+}
+
+// TestBearerAuth covers the three branches: open endpoint, valid token, bad token.
+func TestBearerAuth(t *testing.T) {
+	idx := indexer.NewIndexer("http://127.0.0.1:65535")
+	mgr := syncer.NewManager(nil, idx, nil, 1, 0, 0)
+	api := searchapi.NewService(idx, mgr)
+
+	cases := []struct {
+		name     string
+		token    string
+		header   string
+		wantCode int
+	}{
+		{"open endpoint accepts missing header", "", "", http.StatusOK},
+		{"valid bearer token", "secret", "Bearer secret", http.StatusOK},
+		{"missing header is rejected", "secret", "", http.StatusUnauthorized},
+		{"wrong token is rejected", "secret", "Bearer wrong", http.StatusUnauthorized},
+		{"missing Bearer prefix is rejected", "secret", "secret", http.StatusUnauthorized},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewHTTPHandler(api, tc.token)
+			// A bare GET on the root MCP path lands in the StreamableHTTPHandler, which
+			// will return 4xx (no MCP session) — but only AFTER auth middleware has
+			// passed. We only care that auth either rejects (401) or lets the request
+			// through to MCP (anything else).
+			req := httptest.NewRequest("GET", "/mcp", nil)
+			if tc.header != "" {
+				req.Header.Set("Authorization", tc.header)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if tc.wantCode == http.StatusUnauthorized {
+				if rec.Code != http.StatusUnauthorized {
+					t.Fatalf("got %d, want 401", rec.Code)
+				}
+				return
+			}
+			if rec.Code == http.StatusUnauthorized {
+				t.Fatalf("auth rejected a request that should have passed: header=%q", tc.header)
+			}
+		})
 	}
 }
 

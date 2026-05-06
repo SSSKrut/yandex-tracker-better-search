@@ -13,6 +13,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Build-time metadata. Overridden by goreleaser via -ldflags
+// (-X ytbs/cmd.version=... -X ytbs/cmd.commit=... -X ytbs/cmd.date=...).
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 var (
 	manticoreURL string
 	trackerToken string
@@ -76,7 +84,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Version = "1.0.0"
+	rootCmd.Version = fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose logging")
 
 	rootCmd.SetHelpTemplate(`{{.Long}}

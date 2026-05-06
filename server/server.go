@@ -16,13 +16,15 @@ var templatesFS embed.FS
 
 // Server - HTTP server
 type Server struct {
-	api       *searchapi.Service
-	templates *template.Template
-	addr      string
+	api        *searchapi.Service
+	templates  *template.Template
+	addr       string
+	mcpHandler http.Handler
 }
 
-// NewServer - creates a new Server instance
-func NewServer(addr string, api *searchapi.Service) (*Server, error) {
+// NewServer - creates a new Server instance. If mcpHandler is non-nil, it is
+// mounted at /mcp (and /mcp/) so MCP clients can connect over HTTP.
+func NewServer(addr string, api *searchapi.Service, mcpHandler http.Handler) (*Server, error) {
 
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
@@ -56,9 +58,10 @@ func NewServer(addr string, api *searchapi.Service) (*Server, error) {
 	}
 
 	return &Server{
-		api:       api,
-		templates: tmpl,
-		addr:      addr,
+		api:        api,
+		templates:  tmpl,
+		addr:       addr,
+		mcpHandler: mcpHandler,
 	}, nil
 }
 
@@ -87,6 +90,12 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/sync", s.handleSync)
 	mux.HandleFunc("/api/map", s.handleMapData)
+
+	// MCP (Model Context Protocol) over streamable HTTP, if configured.
+	if s.mcpHandler != nil {
+		mux.Handle("/mcp", s.mcpHandler)
+		mux.Handle("/mcp/", s.mcpHandler)
+	}
 
 	server := &http.Server{
 		Addr:    s.addr,

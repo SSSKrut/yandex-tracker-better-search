@@ -5,8 +5,10 @@ package mcp
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"ytbs/searchapi"
@@ -44,6 +46,36 @@ func NewServer(api *searchapi.Service) *sdk.Server {
 
 // boolPtr is a tiny helper for setting *bool annotations.
 func boolPtr(b bool) *bool { return &b }
+
+// NewHTTPHandler returns an http.Handler that exposes the MCP server over the
+// streamable-HTTP transport. Mount it on a route like /mcp on your existing
+// HTTP server. If authToken is non-empty, requests must carry
+// `Authorization: Bearer <authToken>`; otherwise the endpoint is open (intended
+// for loopback / dev only).
+func NewHTTPHandler(api *searchapi.Service, authToken string) http.Handler {
+	srv := NewServer(api)
+	h := sdk.NewStreamableHTTPHandler(
+		func(*http.Request) *sdk.Server { return srv },
+		nil,
+	)
+	if authToken == "" {
+		return h
+	}
+	return bearerAuth(authToken, h)
+}
+
+func bearerAuth(token string, next http.Handler) http.Handler {
+	expected := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := []byte(r.Header.Get("Authorization"))
+		if subtle.ConstantTimeCompare(got, expected) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="ytbs"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // ---------- search_tasks ----------
 
