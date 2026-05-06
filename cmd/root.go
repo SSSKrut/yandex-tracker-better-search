@@ -35,14 +35,6 @@ for fast full-text searching with rich filtering capabilities.`,
 		trackerOrgID = os.Getenv("TRACKER_CLOUD_ORG_ID")
 		manticoreURL = os.Getenv("MANTICORE_URL")
 
-		if trackerToken == "" {
-			err := fmt.Errorf("TRACKER_OAUTH_TOKEN environment variable is required")
-			log.Fatal(err)
-		}
-		if trackerOrgID == "" {
-			err := fmt.Errorf("TRACKER_CLOUD_ORG_ID environment variable is required")
-			log.Fatal(err)
-		}
 		if manticoreURL == "" {
 			manticoreURL = "http://localhost:9308"
 		}
@@ -61,6 +53,19 @@ for fast full-text searching with rich filtering capabilities.`,
 
 		return nil
 	},
+}
+
+// RequireTrackerEnv ensures TRACKER_OAUTH_TOKEN and TRACKER_CLOUD_ORG_ID are
+// set. Subcommands that talk to the Yandex Tracker API (sync, serve) call
+// this from their PreRunE. Read-only subcommands (search, mcp) skip it.
+func RequireTrackerEnv() error {
+	if trackerToken == "" {
+		return fmt.Errorf("TRACKER_OAUTH_TOKEN environment variable is required")
+	}
+	if trackerOrgID == "" {
+		return fmt.Errorf("TRACKER_CLOUD_ORG_ID environment variable is required")
+	}
+	return nil
 }
 
 // Execute — main execution function
@@ -87,10 +92,10 @@ Flags:
 Global Flags:
 {{.InheritedFlags.FlagUsages}}
 Environment Variables:
-  TRACKER_OAUTH_TOKEN   OAuth token for Yandex Tracker (required)
-  TRACKER_CLOUD_ORG_ID  Cloud Organization ID (required)
+  TRACKER_OAUTH_TOKEN   OAuth token for Yandex Tracker (required for sync/serve)
+  TRACKER_CLOUD_ORG_ID  Cloud Organization ID (required for sync/serve)
   MANTICORE_URL         Manticore Search URL (default: http://localhost:9308)
-	ATTACHMENT_TEXT_MAX_BYTES  Max size in bytes for downloading/indexing text attachments (default: 2097152)
+  ATTACHMENT_TEXT_MAX_BYTES  Max size in bytes for downloading/indexing text attachments (default: 2097152)
 
 Use "{{.CommandPath}} [command] --help" for more information about a command.
 `)

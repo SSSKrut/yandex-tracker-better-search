@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"ytbs/searchapi"
 	"ytbs/server"
 	"ytbs/sync"
 	"ytbs/tracker"
@@ -28,6 +29,8 @@ Provides web interface for:
   - Manual sync triggering
   - Sync status and logs`,
 
+	PreRunE: func(cmd *cobra.Command, args []string) error { return RequireTrackerEnv() },
+
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := tracker.NewClient(GetTrackerToken(), GetTrackerOrgID())
 
@@ -43,7 +46,8 @@ Provides web interface for:
 		// Background sync at startup
 		go syncMgr.Start(GetContext())
 
-		srv, err := server.NewServer(serveAddr, GetIndexer(), syncMgr)
+		api := searchapi.NewService(GetIndexer(), syncMgr)
+		srv, err := server.NewServer(serveAddr, api)
 		if err != nil {
 			return err
 		}

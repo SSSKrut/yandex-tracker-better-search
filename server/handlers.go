@@ -4,12 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 
-	"ytbs/indexer"
+	"ytbs/searchapi"
 )
 
 // handleIndex - main page
@@ -19,18 +15,17 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load filter options
-	filterOptions, err := s.indexer.GetFilterOptions(r.Context())
+	filterOptions, err := s.api.GetFilterOptions(r.Context())
 	if err != nil {
 		log.Printf("Error loading filter options: %v", err)
-		filterOptions = &indexer.FilterOptions{}
+		filterOptions = &searchapi.FilterOptions{}
 	}
 
 	data := struct {
 		Status  any
-		Filters *indexer.FilterOptions
+		Filters *searchapi.FilterOptions
 	}{
-		Status:  s.syncManager.GetStatus(),
+		Status:  s.api.Status().Status,
 		Filters: filterOptions,
 	}
 
@@ -43,8 +38,8 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		Logs   any
 		Status any
 	}{
-		Logs:   s.syncManager.GetLogs(100),
-		Status: s.syncManager.GetStatus(),
+		Logs:   s.api.Logs(100),
+		Status: s.api.Status().Status,
 	}
 
 	s.templates.ExecuteTemplate(w, "logs.html", data)
@@ -55,7 +50,7 @@ func (s *Server) handleMap(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Status any
 	}{
-		Status: s.syncManager.GetStatus(),
+		Status: s.api.Status().Status,
 	}
 
 	s.templates.ExecuteTemplate(w, "map.html", data)
@@ -64,30 +59,13 @@ func (s *Server) handleMap(w http.ResponseWriter, r *http.Request) {
 // handleMapData - map data API
 func (s *Server) handleMapData(w http.ResponseWriter, r *http.Request) {
 	refresh := r.URL.Query().Get("refresh") == "1"
-	cacheTTL := mapCacheTTL()
 
-	if !refresh {
-		s.mapCacheMu.Lock()
-		cached := s.mapCache
-		cachedAt := s.mapCacheAt
-		s.mapCacheMu.Unlock()
-		if cached != nil && time.Since(cachedAt) < cacheTTL {
-			writeJSON(w, cached)
-			return
-		}
-	}
-
-	data, err := s.indexer.BuildSimilarityMap(r.Context(), indexer.MapOptionsFromEnv())
+	data, err := s.api.Map(r.Context(), refresh)
 	if err != nil {
 		log.Printf("Map build error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	s.mapCacheMu.Lock()
-	s.mapCache = data
-	s.mapCacheAt = time.Now()
-	s.mapCacheMu.Unlock()
 
 	writeJSON(w, data)
 }
@@ -101,54 +79,40 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	}
 }
 
-func mapCacheTTL() time.Duration {
-	const defaultMinutes = 10
-	val := strings.TrimSpace(os.Getenv("MAP_CACHE_MINUTES"))
-	if val == "" {
-		return time.Duration(defaultMinutes) * time.Minute
-	}
-	parsed, err := strconv.Atoi(val)
-	if err != nil || parsed <= 0 {
-		return time.Duration(defaultMinutes) * time.Minute
-	}
-	return time.Duration(parsed) * time.Minute
-}
-
 // handleSearch - search API (htmx)
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 
-	// Get filter parameters
-	filters := indexer.SearchFilters{
+	params := searchapi.SearchParams{
+		Query:    query,
 		Queue:    r.URL.Query().Get("queue"),
 		Status:   r.URL.Query().Get("status"),
 		Priority: r.URL.Query().Get("priority"),
 		Author:   r.URL.Query().Get("author"),
 		Assignee: r.URL.Query().Get("assignee"),
+		Limit:    50,
 	}
 
-	// Unified data structure for template
 	data := struct {
 		Query   string
 		Results any
 		Count   int
 		Error   string
-		Filters indexer.SearchFilters
+		Filters searchapi.SearchParams
 	}{
 		Query:   query,
-		Filters: filters,
+		Filters: params,
 	}
 
-	// Check if we have any search criteria
-	hasFilters := filters.Queue != "" || filters.Status != "" || filters.Priority != "" ||
-		filters.Author != "" || filters.Assignee != ""
+	hasFilters := params.Queue != "" || params.Status != "" || params.Priority != "" ||
+		params.Author != "" || params.Assignee != ""
 
 	if query == "" && !hasFilters {
 		s.templates.ExecuteTemplate(w, "results.html", data)
 		return
 	}
 
-	results, err := s.indexer.SearchWithFilters(r.Context(), query, filters, 50)
+	results, err := s.api.SearchRich(r.Context(), params)
 	if err != nil {
 		data.Error = err.Error()
 		s.templates.ExecuteTemplate(w, "results.html", data)
@@ -158,7 +122,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	data.Results = results
 	data.Count = len(results)
-	log.Printf("Search query: %q, filters: %+v, results: %d", query, filters, len(results))
+	log.Printf("Search query: %q, filters: %+v, results: %d", query, params, len(results))
 
 	if err := s.templates.ExecuteTemplate(w, "results.html", data); err != nil {
 		log.Printf("Template error: %v", err)
@@ -167,23 +131,22 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 // handleStatus - status API (htmx)
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	s.templates.ExecuteTemplate(w, "status.html", s.syncManager.GetStatus())
+	s.templates.ExecuteTemplate(w, "status.html", s.api.Status().Status)
 }
 
 // handleSync - syncronization control API (htmx)
 func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		err := s.syncManager.TriggerSync()
-		if err != nil {
+		if err := s.api.TriggerSync(""); err != nil {
 			w.Header().Set("HX-Trigger", "sync-error")
 		} else {
 			w.Header().Set("HX-Trigger", "sync-started")
 		}
 	case http.MethodDelete:
-		s.syncManager.CancelSync()
+		s.api.CancelSync()
 		w.Header().Set("HX-Trigger", "sync-cancelled")
 	}
 
-	s.templates.ExecuteTemplate(w, "status.html", s.syncManager.GetStatus())
+	s.templates.ExecuteTemplate(w, "status.html", s.api.Status().Status)
 }

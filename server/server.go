@@ -6,11 +6,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	stdsync "sync"
 	"time"
 
-	"ytbs/indexer"
-	syncer "ytbs/sync"
+	"ytbs/searchapi"
 )
 
 //go:embed templates/*
@@ -18,17 +16,13 @@ var templatesFS embed.FS
 
 // Server - HTTP server
 type Server struct {
-	indexer     *indexer.Indexer
-	syncManager *syncer.Manager
-	templates   *template.Template
-	addr        string
-	mapCacheMu  stdsync.Mutex
-	mapCache    *indexer.MapData
-	mapCacheAt  time.Time
+	api       *searchapi.Service
+	templates *template.Template
+	addr      string
 }
 
 // NewServer - creates a new Server instance
-func NewServer(addr string, indexer *indexer.Indexer, syncManager *syncer.Manager) (*Server, error) {
+func NewServer(addr string, api *searchapi.Service) (*Server, error) {
 
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
@@ -62,10 +56,9 @@ func NewServer(addr string, indexer *indexer.Indexer, syncManager *syncer.Manage
 	}
 
 	return &Server{
-		indexer:     indexer,
-		syncManager: syncManager,
-		templates:   tmpl,
-		addr:        addr,
+		api:       api,
+		templates: tmpl,
+		addr:      addr,
 	}, nil
 }
 

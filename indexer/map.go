@@ -51,10 +51,22 @@ type MapStats struct {
 	Clusters int `json:"clusters"`
 }
 
+// MapCluster - per-cluster summary precomputed in BuildSimilarityMap.
+// CentralKeys lists up to 3 doc keys closest to the cluster centroid in 2D
+// space, ordered by centrality. TopKeywords are the top tokens by cumulative
+// TF-IDF weight inside the cluster.
+type MapCluster struct {
+	ID          int      `json:"id"`
+	Size        int      `json:"size"`
+	TopKeywords []string `json:"top_keywords"`
+	CentralKeys []string `json:"central_keys"`
+}
+
 type MapData struct {
-	GeneratedAt time.Time  `json:"generated_at"`
-	Points      []MapPoint `json:"points"`
-	Stats       MapStats   `json:"stats"`
+	GeneratedAt time.Time    `json:"generated_at"`
+	Points      []MapPoint   `json:"points"`
+	Stats       MapStats     `json:"stats"`
+	Clusters    []MapCluster `json:"clusters,omitempty"`
 }
 
 type mapDocument struct {
@@ -135,7 +147,7 @@ func (idx *Indexer) BuildSimilarityMap(ctx context.Context, opts MapOptions) (*M
 		}, nil
 	}
 
-	matrix, rows, cols, err := buildTFIDFMatrix(docs, opts.MaxVocab)
+	matrix, vocab, rows, cols, err := buildTFIDFMatrix(docs, opts.MaxVocab)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +176,8 @@ func (idx *Indexer) BuildSimilarityMap(ctx context.Context, opts MapOptions) (*M
 		}
 	}
 
+	clusterSummaries := summarizeClusters(docs, matrix, vocab, rows, cols, clusters, coords)
+
 	return &MapData{
 		GeneratedAt: time.Now(),
 		Points:      points,
@@ -174,7 +188,124 @@ func (idx *Indexer) BuildSimilarityMap(ctx context.Context, opts MapOptions) (*M
 			Vocab:    cols,
 			Clusters: uniqueClusterCount(clusters),
 		},
+		Clusters: clusterSummaries,
 	}, nil
+}
+
+// summarizeClusters builds per-cluster summaries: top keywords by cumulative
+// TF-IDF weight and up to 3 keys closest to the 2D centroid.
+func summarizeClusters(
+	docs []mapDocument,
+	tfidf []float64,
+	vocab []string,
+	rows, cols int,
+	assignments []int,
+	coords [][2]float64,
+) []MapCluster {
+	if rows == 0 || cols == 0 || len(vocab) != cols {
+		return nil
+	}
+
+	const topKeywordsN = 5
+	const centralKeysN = 3
+
+	groups := map[int][]int{}
+	for i, c := range assignments {
+		groups[c] = append(groups[c], i)
+	}
+
+	ids := make([]int, 0, len(groups))
+	for id := range groups {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	out := make([]MapCluster, 0, len(ids))
+	for _, id := range ids {
+		members := groups[id]
+		if len(members) == 0 {
+			continue
+		}
+
+		weights := make([]float64, cols)
+		var cx, cy float64
+		for _, i := range members {
+			row := tfidf[i*cols : (i+1)*cols]
+			for j, v := range row {
+				weights[j] += v
+			}
+			cx += coords[i][0]
+			cy += coords[i][1]
+		}
+		cx /= float64(len(members))
+		cy /= float64(len(members))
+
+		type tw struct {
+			token  string
+			weight float64
+		}
+		ranked := make([]tw, 0, cols)
+		for j, w := range weights {
+			if w > 0 {
+				ranked = append(ranked, tw{token: vocab[j], weight: w})
+			}
+		}
+		sort.Slice(ranked, func(a, b int) bool {
+			if ranked[a].weight == ranked[b].weight {
+				return ranked[a].token < ranked[b].token
+			}
+			return ranked[a].weight > ranked[b].weight
+		})
+		topN := topKeywordsN
+		if len(ranked) < topN {
+			topN = len(ranked)
+		}
+		keywords := make([]string, topN)
+		for i := 0; i < topN; i++ {
+			keywords[i] = ranked[i].token
+		}
+
+		type dk struct {
+			idx  int
+			dist float64
+		}
+		dist := make([]dk, len(members))
+		for i, m := range members {
+			dx := coords[m][0] - cx
+			dy := coords[m][1] - cy
+			dist[i] = dk{idx: m, dist: dx*dx + dy*dy}
+		}
+		sort.Slice(dist, func(a, b int) bool { return dist[a].dist < dist[b].dist })
+		centralN := centralKeysN
+		if len(dist) < centralN {
+			centralN = len(dist)
+		}
+		central := make([]string, 0, centralN)
+		seen := map[string]struct{}{}
+		for _, d := range dist {
+			key := docs[d.idx].Key
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			central = append(central, key)
+			if len(central) >= centralN {
+				break
+			}
+		}
+
+		out = append(out, MapCluster{
+			ID:          id,
+			Size:        len(members),
+			TopKeywords: keywords,
+			CentralKeys: central,
+		})
+	}
+
+	return out
 }
 
 func sanitizeMapOptions(opts MapOptions) MapOptions {
@@ -338,9 +469,9 @@ func (idx *Indexer) loadFileDocs(ctx context.Context, opts MapOptions) ([]mapDoc
 	return docs, nil
 }
 
-func buildTFIDFMatrix(docs []mapDocument, maxVocab int) ([]float64, int, int, error) {
+func buildTFIDFMatrix(docs []mapDocument, maxVocab int) ([]float64, []string, int, int, error) {
 	if len(docs) == 0 {
-		return nil, 0, 0, nil
+		return nil, nil, 0, 0, nil
 	}
 
 	if maxVocab <= 0 {
@@ -378,9 +509,11 @@ func buildTFIDFMatrix(docs []mapDocument, maxVocab int) ([]float64, int, int, er
 	}
 
 	vocabIndex := make(map[string]int, len(tokens))
+	vocab := make([]string, len(tokens))
 	idf := make([]float64, len(tokens))
 	for i, token := range tokens {
 		vocabIndex[token.token] = i
+		vocab[i] = token.token
 		idf[i] = math.Log((1.0+float64(len(docs)))/(1.0+float64(token.df))) + 1.0
 	}
 
@@ -401,7 +534,7 @@ func buildTFIDFMatrix(docs []mapDocument, maxVocab int) ([]float64, int, int, er
 		normalizeVector(row)
 	}
 
-	return data, rows, cols, nil
+	return data, vocab, rows, cols, nil
 }
 
 type tokenStat struct {

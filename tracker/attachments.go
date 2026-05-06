@@ -38,6 +38,7 @@ var textMimeAllowList = map[string]struct{}{
 // The structure keeps both searchable content and metadata for non-text files.
 type IndexedFile struct {
 	ID             string    `json:"id"`
+	AttachmentID   string    `json:"attachment_id"`
 	IssueKey       string    `json:"issue_key"`
 	IssueURL       string    `json:"issue_url"`
 	FileURL        string    `json:"file_url"`
@@ -94,9 +95,10 @@ func (c *Client) extractIndexedFilesForIssue(ctx context.Context, issue Issue, c
 
 		doc := IndexedFile{
 			ID:           a.ID,
+			AttachmentID: a.ID,
 			IssueKey:     issue.Key,
 			IssueURL:     issueURL,
-			FileURL:      resolveAttachmentURL(a),
+			FileURL:      issueURL,
 			FileName:     a.Name,
 			Queue:        issue.Queue.Key,
 			StatusName:   issue.Status.Display,
@@ -117,10 +119,11 @@ func (c *Client) extractIndexedFilesForIssue(ctx context.Context, issue Issue, c
 
 		doc.MetadataText = buildAttachmentMetadataText(doc)
 
-		if c.isTextAttachment(doc) && doc.FileURL != "" {
-			content, _, err := c.DownloadURL(ctx, doc.FileURL)
+		downloadURL := attachmentDownloadURL(a)
+		if c.isTextAttachment(doc) && downloadURL != "" {
+			content, _, err := c.DownloadURL(ctx, downloadURL)
 			if err != nil {
-				err = fmt.Errorf("download attachment %q (%s): %w", doc.FileName, doc.FileURL, err)
+				err = fmt.Errorf("download attachment %q (%s): %w", doc.FileName, downloadURL, err)
 				err = wrapAttachmentError(issue.Key, err)
 				errs = append(errs, err)
 				doc.DownloadFailed = true
@@ -171,7 +174,12 @@ func attachmentDedupeKey(a Attachment) string {
 	return a.Name + "|" + a.Content + "|" + a.Self
 }
 
-func resolveAttachmentURL(a Attachment) string {
+// attachmentDownloadURL returns the API URL used at sync time to fetch the
+// attachment bytes. It is intentionally NOT stored in IndexedFile.FileURL —
+// IndexedFile.FileURL holds a user-facing UI link instead (see
+// extractIndexedFilesForIssue), because this URL requires an OAuth token
+// and is not navigable from a browser.
+func attachmentDownloadURL(a Attachment) string {
 	if a.Content != "" {
 		return a.Content
 	}

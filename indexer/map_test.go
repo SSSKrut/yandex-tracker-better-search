@@ -27,7 +27,7 @@ func TestBuildTFIDFMatrix_NormalizesRows(t *testing.T) {
 		{Text: "foo baz"},
 	}
 
-	data, rows, cols, err := buildTFIDFMatrix(docs, 10)
+	data, vocab, rows, cols, err := buildTFIDFMatrix(docs, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,6 +36,9 @@ func TestBuildTFIDFMatrix_NormalizesRows(t *testing.T) {
 	}
 	if cols == 0 {
 		t.Fatalf("expected non-zero vocab size")
+	}
+	if len(vocab) != cols {
+		t.Fatalf("vocab length %d does not match cols %d", len(vocab), cols)
 	}
 
 	for i := 0; i < rows; i++ {
@@ -68,6 +71,62 @@ func TestReduceWithSVD_Dimensions(t *testing.T) {
 	}
 	if len(reduced) != 2 || len(reduced[0]) != 2 {
 		t.Fatalf("expected 2x2 reduced vectors")
+	}
+}
+
+func TestSummarizeClusters_TopKeywordsAndCentralKeys(t *testing.T) {
+	docs := []mapDocument{
+		{Key: "A-1", Text: "alpha alpha beta"},
+		{Key: "A-2", Text: "alpha beta beta"},
+		{Key: "B-1", Text: "gamma delta delta"},
+		{Key: "B-2", Text: "gamma delta epsilon"},
+	}
+
+	tfidf, vocab, rows, cols, err := buildTFIDFMatrix(docs, 100)
+	if err != nil {
+		t.Fatalf("build matrix: %v", err)
+	}
+	if rows != 4 || cols == 0 {
+		t.Fatalf("unexpected matrix shape: rows=%d cols=%d", rows, cols)
+	}
+
+	// A-cluster around (0,0), B-cluster around (10,10) — straightforward 2D
+	// layout to make centroid math obvious.
+	coords := [][2]float64{
+		{0, 0}, {0.1, 0.1},
+		{10, 10}, {10.1, 10.1},
+	}
+	assignments := []int{0, 0, 1, 1}
+
+	clusters := summarizeClusters(docs, tfidf, vocab, rows, cols, assignments, coords)
+	if len(clusters) != 2 {
+		t.Fatalf("expected 2 clusters, got %d", len(clusters))
+	}
+
+	for _, c := range clusters {
+		if c.Size != 2 {
+			t.Fatalf("expected cluster %d to have size 2, got %d", c.ID, c.Size)
+		}
+		if len(c.TopKeywords) == 0 {
+			t.Fatalf("expected non-empty top keywords for cluster %d", c.ID)
+		}
+		if len(c.CentralKeys) == 0 {
+			t.Fatalf("expected at least one central key for cluster %d", c.ID)
+		}
+	}
+
+	// Cluster A's keywords should contain alpha or beta, and not gamma/delta.
+	hasAlphaOrBeta := false
+	for _, kw := range clusters[0].TopKeywords {
+		if kw == "alpha" || kw == "beta" {
+			hasAlphaOrBeta = true
+		}
+		if kw == "gamma" || kw == "delta" {
+			t.Fatalf("unexpected keyword %q leaked into cluster 0", kw)
+		}
+	}
+	if !hasAlphaOrBeta {
+		t.Fatalf("cluster 0 should surface alpha/beta keywords, got %v", clusters[0].TopKeywords)
 	}
 }
 

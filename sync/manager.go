@@ -25,6 +25,19 @@ type Status struct {
 	Duration      string    `json:"duration,omitempty"`
 }
 
+// Sync mode names accepted by TriggerSync.
+const (
+	ModeIncremental = "incremental"
+	ModeFull        = "full"
+)
+
+// syncRequest is dispatched to the manager's run loop. cancel=true cancels the
+// in-flight sync; otherwise mode selects between incremental and full.
+type syncRequest struct {
+	cancel bool
+	mode   string
+}
+
 // Manager - synchronization manager
 type Manager struct {
 	tracker             *tracker.Client
@@ -39,7 +52,7 @@ type Manager struct {
 	mu             sync.RWMutex
 	status         Status
 	logs           []LogEntry
-	requestChannel chan bool
+	requestChannel chan syncRequest
 	state          SyncState
 }
 
@@ -69,7 +82,7 @@ func NewManager(tracker *tracker.Client, indexer *indexer.Indexer, queues []stri
 		overlap:             readEnvDuration("SYNC_OVERLAP", 2*time.Minute),
 		stateStore:          NewStateStore(DefaultStatePath()),
 		logs:                make([]LogEntry, 0, 100),
-		requestChannel:      make(chan bool, 1),
+		requestChannel:      make(chan syncRequest, 1),
 	}
 }
 
@@ -106,11 +119,17 @@ func (m *Manager) Start(ctx context.Context) {
 			go m.RunFullSync(syncCtx)
 			m.addLog("info", "Scheduled full sync triggered")
 		case req := <-m.requestChannel:
-			if req {
-				syncCtx, cancel = context.WithCancel(ctx)
+			if req.cancel {
+				if cancel != nil {
+					cancel()
+				}
+				continue
+			}
+			syncCtx, cancel = context.WithCancel(ctx)
+			if req.mode == ModeIncremental {
+				go m.RunIncrementalSync(syncCtx)
+			} else {
 				go m.RunFullSync(syncCtx)
-			} else if cancel != nil {
-				cancel()
 			}
 		}
 	}
@@ -261,25 +280,37 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 		result.TotalIssues, result.TotalComments, result.TotalFiles, result.TextFiles, duration.Round(time.Second)))
 }
 
-// TriggerSync - starts synchronization manually
-func (m *Manager) TriggerSync() error {
-	if m.status.InProgress {
+// TriggerSync - starts synchronization manually. mode is either ModeIncremental
+// or ModeFull; an empty/unknown value defaults to ModeFull to preserve the
+// historical behaviour of this method.
+func (m *Manager) TriggerSync(mode string) error {
+	if m.GetStatus().InProgress {
 		return fmt.Errorf("sync already in progress")
 	}
 
-	m.requestChannel <- true
-	m.addLog("info", "Manual sync triggered")
+	if mode != ModeIncremental {
+		mode = ModeFull
+	}
+
+	m.requestChannel <- syncRequest{mode: mode}
+	m.addLog("info", fmt.Sprintf("Manual %s sync triggered", mode))
 	return nil
 }
 
 // CancelSync - cancels current synchronization
 func (m *Manager) CancelSync() error {
-	if !m.status.InProgress {
+	if !m.GetStatus().InProgress {
 		return fmt.Errorf("sync not in progress")
 	}
-	m.requestChannel <- false
+	m.requestChannel <- syncRequest{cancel: true}
 	m.addLog("warning", "Sync cancelled by user")
 	return nil
+}
+
+// GetState returns a snapshot of persisted sync state (last_full_sync_at,
+// last_incremental_sync_at, last_updated_at).
+func (m *Manager) GetState() SyncState {
+	return m.getState()
 }
 
 // GetStatus - returns current status

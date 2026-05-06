@@ -17,11 +17,13 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Run one-time sync from Tracker",
 	Long: `Fetch all issues and comments from Yandex Tracker and index them.
-    
+
 Performs a complete sync of:
   - All issues from specified queues (or all accessible queues)
   - All comments for each issue
   - Indexes everything into Manticore Search`,
+
+	PreRunE: func(cmd *cobra.Command, args []string) error { return RequireTrackerEnv() },
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := tracker.NewClient(GetTrackerToken(), GetTrackerOrgID())

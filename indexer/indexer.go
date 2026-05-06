@@ -232,7 +232,7 @@ func (idx *Indexer) indexFilesBatch(ctx context.Context, files []tracker.Indexed
 	for _, file := range files {
 		id, err := strconv.ParseInt(file.ID, 10, 64)
 		if err != nil {
-			id = hashString(file.IssueKey + "|" + file.FileName + "|" + file.FileURL)
+			id = hashString(file.IssueKey + "|" + file.FileName + "|" + file.AttachmentID)
 		}
 
 		sql := fmt.Sprintf(`REPLACE INTO %s (id, issue_key, issue_url, file_url, file_name, content_text, metadata_text,
