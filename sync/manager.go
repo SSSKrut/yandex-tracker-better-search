@@ -13,6 +13,25 @@ import (
 	"ytbs/tracker"
 )
 
+// Stage names that appear in Progress.Stage during an in-flight sync. The UI
+// uses these to label the spinner; new stages should keep the value short and
+// stable since clients may filter on it.
+const (
+	StageIssues   = "issues"
+	StageComments = "comments"
+	StageFiles    = "files"
+	StageIndexing = "indexing"
+)
+
+// Progress describes the current step of an in-flight sync. Stage is one of the
+// Stage* constants (empty when no sync is running). Total is 0 when the upper
+// bound is unknown (e.g. while scrolling the initial issue page list).
+type Progress struct {
+	Stage   string `json:"stage,omitempty"`
+	Current int    `json:"current"`
+	Total   int    `json:"total"`
+}
+
 // Status - synchronization status
 type Status struct {
 	InProgress    bool      `json:"in_progress"`
@@ -23,6 +42,7 @@ type Status struct {
 	FilesCount    int       `json:"files_count"`
 	TextFiles     int       `json:"text_files"`
 	Duration      string    `json:"duration,omitempty"`
+	Progress      Progress  `json:"progress"`
 }
 
 // Sync mode names accepted by TriggerSync.
@@ -144,6 +164,7 @@ func (m *Manager) RunFullSync(ctx context.Context) {
 	m.mu.Lock()
 	m.status.InProgress = true
 	m.status.LastSyncError = ""
+	m.status.Progress = Progress{Stage: StageIssues}
 	m.mu.Unlock()
 
 	startTime := time.Now()
@@ -152,10 +173,11 @@ func (m *Manager) RunFullSync(ctx context.Context) {
 	defer func() {
 		m.mu.Lock()
 		m.status.InProgress = false
+		m.status.Progress = Progress{}
 		m.mu.Unlock()
 	}()
 
-	issues, files, result, err := m.tracker.InitialSync(ctx, m.queues, m.workers)
+	issues, files, result, err := m.tracker.InitialSyncWithProgress(ctx, m.queues, m.workers, m.trackerProgress)
 	if err != nil {
 		m.mu.Lock()
 		m.status.LastSyncError = err.Error()
@@ -164,6 +186,7 @@ func (m *Manager) RunFullSync(ctx context.Context) {
 		return
 	}
 
+	m.setProgress(StageIndexing, 0, len(issues)+len(files))
 	if err := m.indexer.IndexIssues(ctx, issues); err != nil {
 		m.mu.Lock()
 		m.status.LastSyncError = err.Error()
@@ -171,6 +194,7 @@ func (m *Manager) RunFullSync(ctx context.Context) {
 		m.addLog("error", fmt.Sprintf("Indexing failed: %v", err))
 		return
 	}
+	m.setProgress(StageIndexing, len(issues), len(issues)+len(files))
 
 	if err := m.indexer.IndexFiles(ctx, files); err != nil {
 		m.mu.Lock()
@@ -179,6 +203,7 @@ func (m *Manager) RunFullSync(ctx context.Context) {
 		m.addLog("error", fmt.Sprintf("File indexing failed: %v", err))
 		return
 	}
+	m.setProgress(StageIndexing, len(issues)+len(files), len(issues)+len(files))
 
 	duration := time.Since(startTime)
 
@@ -221,6 +246,7 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 	m.mu.Lock()
 	m.status.InProgress = true
 	m.status.LastSyncError = ""
+	m.status.Progress = Progress{Stage: StageIssues}
 	m.mu.Unlock()
 
 	startTime := time.Now()
@@ -229,11 +255,12 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 	defer func() {
 		m.mu.Lock()
 		m.status.InProgress = false
+		m.status.Progress = Progress{}
 		m.mu.Unlock()
 	}()
 
 	since := state.LastUpdatedAt.Add(-m.overlap)
-	issues, files, result, err := m.tracker.IncrementalSync(ctx, since, m.queues, m.workers)
+	issues, files, result, err := m.tracker.IncrementalSyncWithProgress(ctx, since, m.queues, m.workers, m.trackerProgress)
 	if err != nil {
 		m.mu.Lock()
 		m.status.LastSyncError = err.Error()
@@ -242,6 +269,7 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 		return
 	}
 
+	m.setProgress(StageIndexing, 0, len(issues)+len(files))
 	if err := m.indexer.IndexIssues(ctx, issues); err != nil {
 		m.mu.Lock()
 		m.status.LastSyncError = err.Error()
@@ -249,6 +277,7 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 		m.addLog("error", fmt.Sprintf("Indexing failed: %v", err))
 		return
 	}
+	m.setProgress(StageIndexing, len(issues), len(issues)+len(files))
 
 	if err := m.indexer.IndexFiles(ctx, files); err != nil {
 		m.mu.Lock()
@@ -257,6 +286,7 @@ func (m *Manager) RunIncrementalSync(ctx context.Context) {
 		m.addLog("error", fmt.Sprintf("File indexing failed: %v", err))
 		return
 	}
+	m.setProgress(StageIndexing, len(issues)+len(files), len(issues)+len(files))
 
 	m.updateState(func(state *SyncState) {
 		state.LastIncrementalSyncAt = time.Now()
@@ -343,6 +373,27 @@ func (m *Manager) GetLogs(limit int) []LogEntry {
 	}
 
 	return result
+}
+
+// trackerProgress is the ProgressFunc handed to tracker.Client; it maps
+// tracker-side stage names onto the user-facing Stage* constants.
+func (m *Manager) trackerProgress(stage string, current, total int) {
+	switch stage {
+	case tracker.ProgressStageIssues:
+		m.setProgress(StageIssues, current, total)
+	case tracker.ProgressStageComments:
+		m.setProgress(StageComments, current, total)
+	default:
+		m.setProgress(stage, current, total)
+	}
+}
+
+// setProgress updates the live progress reporter on Status. Safe to call from
+// any goroutine.
+func (m *Manager) setProgress(stage string, current, total int) {
+	m.mu.Lock()
+	m.status.Progress = Progress{Stage: stage, Current: current, Total: total}
+	m.mu.Unlock()
 }
 
 func (m *Manager) addLog(level, message string) {

@@ -12,6 +12,13 @@ import (
 // FetchAllIssues - loads all issues from the specified queues (or all if queues is empty).
 // Uses a scrolling mechanism for large datasets
 func (c *Client) FetchAllIssues(ctx context.Context, queues []string) ([]Issue, error) {
+	return c.fetchAllIssuesWithProgress(ctx, queues, nil)
+}
+
+func (c *Client) fetchAllIssuesWithProgress(ctx context.Context, queues []string, progress ProgressFunc) ([]Issue, error) {
+	if progress == nil {
+		progress = noopProgress
+	}
 	var allIssues []Issue
 
 	queueQuery := buildQueueQuery(queues)
@@ -48,6 +55,9 @@ func (c *Client) FetchAllIssues(ctx context.Context, queues []string) ([]Issue, 
 		}
 
 		allIssues = append(allIssues, issues...)
+		// Scroll-based pagination: total is unknown until the last page, so
+		// we report a count-only progress event (total=0).
+		progress(ProgressStageIssues, len(allIssues), 0)
 
 		// check for more pages
 		scrollID := headers.Get("X-Scroll-Id")
@@ -60,6 +70,7 @@ func (c *Client) FetchAllIssues(ctx context.Context, queues []string) ([]Issue, 
 	}
 
 	log.Printf("Total issues fetched: %d", len(allIssues))
+	progress(ProgressStageIssues, len(allIssues), len(allIssues))
 	return allIssues, nil
 }
 
@@ -156,6 +167,13 @@ func (c *Client) FetchIssueAttachments(ctx context.Context, issueKey string) ([]
 
 // FetchUpdatedIssues - loads issues updated since the specified timestamp (in RFC3339 format)
 func (c *Client) FetchUpdatedIssues(ctx context.Context, since time.Time, queues []string) ([]Issue, error) {
+	return c.fetchUpdatedIssuesWithProgress(ctx, since, queues, nil)
+}
+
+func (c *Client) fetchUpdatedIssuesWithProgress(ctx context.Context, since time.Time, queues []string, progress ProgressFunc) ([]Issue, error) {
+	if progress == nil {
+		progress = noopProgress
+	}
 	query := buildUpdatedQuery(since, queues)
 
 	reqBody := SearchRequest{Query: query}
@@ -186,11 +204,18 @@ func (c *Client) FetchUpdatedIssues(ctx context.Context, since time.Time, queues
 		// check for more pages
 		totalPages := headers.Get("X-Total-Pages")
 		if totalPages == "" {
+			progress(ProgressStageIssues, len(allIssues), len(allIssues))
 			break
 		}
 
 		totalPagesInt, _ := strconv.Atoi(totalPages)
+		// We can derive a reasonable upper bound for total issues from
+		// totalPages*maxPerPage; it'll over-estimate on the last page but
+		// good enough for a circular indicator.
+		estTotal := totalPagesInt * maxPerPage
+		progress(ProgressStageIssues, len(allIssues), estTotal)
 		if page >= totalPagesInt {
+			progress(ProgressStageIssues, len(allIssues), len(allIssues))
 			break
 		}
 

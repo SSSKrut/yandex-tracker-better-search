@@ -1,11 +1,41 @@
+{{- $pct := progressPercent .Progress -}}
 <div class="sync-status {{if .InProgress}}syncing{{else if .LastSyncError}}error{{end}}">
     {{if .InProgress}}
-    <span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span>
-    Синхронизация...
-    <button class="btn btn-secondary" style="margin-left:8px;padding:4px 8px;" hx-delete="/api/sync"
-        hx-target="#sync-status" hx-swap="innerHTML">
-        ✕
-    </button>
+    <div class="sync-progress"
+         hx-get="/api/status"
+         hx-trigger="every 1500ms"
+         hx-target="#sync-status"
+         hx-swap="innerHTML">
+        <svg class="progress-ring" width="32" height="32" viewBox="0 0 32 32" aria-label="Прогресс">
+            <circle class="progress-ring-bg" cx="16" cy="16" r="13" fill="none" stroke-width="3"/>
+            <g class="progress-ring-rotate{{if eq $pct 0}} indeterminate{{end}}">
+                <circle class="progress-ring-fg"
+                        cx="16" cy="16" r="13" fill="none" stroke-width="3"
+                        pathLength="100"
+                        stroke-dasharray="100"
+                        stroke-dashoffset="{{if eq $pct 0}}75{{else}}{{sub100 $pct}}{{end}}"
+                        transform="rotate(-90 16 16)"/>
+            </g>
+            {{if gt $pct 0}}
+            <text class="progress-ring-text" x="16" y="17" text-anchor="middle" dominant-baseline="middle">{{$pct}}</text>
+            {{end}}
+        </svg>
+        <div class="sync-progress-info">
+            <div class="sync-progress-stage">{{progressStageLabel .Progress.Stage}}</div>
+            <div class="sync-progress-count">
+                {{if gt .Progress.Total 0}}
+                    {{.Progress.Current}} / {{.Progress.Total}}
+                {{else if gt .Progress.Current 0}}
+                    {{.Progress.Current}}
+                {{end}}
+            </div>
+        </div>
+        <button class="btn btn-secondary sync-cancel"
+                hx-delete="/api/sync"
+                hx-target="#sync-status"
+                hx-swap="innerHTML"
+                title="Отменить синхронизацию">✕</button>
+    </div>
     {{else}}
     {{if .LastSyncError}}
     <span title="{{.LastSyncError}}">⚠️ Ошибка синхронизации</span>
@@ -15,8 +45,10 @@
     {{else}}
     <span>Не синхронизировано</span>
     {{end}}
-    <button class="btn btn-primary" style="margin-left:12px;padding:4px 12px;" hx-post="/api/sync"
-        hx-target="#sync-status" hx-swap="innerHTML">
+    <button class="btn btn-primary" style="margin-left:12px;padding:4px 12px;"
+            hx-post="/api/sync"
+            hx-target="#sync-status"
+            hx-swap="innerHTML">
         🔄 Синхронизировать
     </button>
     {{end}}

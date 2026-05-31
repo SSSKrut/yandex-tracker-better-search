@@ -33,7 +33,7 @@ Manticore data lives in the `manticore_data` Docker volume; backup/restore recip
 
 ## Required environment
 
-- `TRACKER_OAUTH_TOKEN` — OAuth token for the Yandex Tracker v3 API (fatal if missing)
+- `TRACKER_OAUTH_TOKEN` or `TRACKER_IAM_TOKEN` — auth for Yandex Tracker v3 API (one of them is required for sync/serve; IAM wins if both are set)
 - `TRACKER_CLOUD_ORG_ID` — Cloud Organization ID, sent as `X-Cloud-Org-ID` (fatal if missing)
 - `MANTICORE_URL` — Manticore HTTP API endpoint (default `http://localhost:9308`)
 

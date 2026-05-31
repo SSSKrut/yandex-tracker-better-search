@@ -26,7 +26,7 @@ Performs a complete sync of:
 	PreRunE: func(cmd *cobra.Command, args []string) error { return RequireTrackerEnv() },
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := tracker.NewClient(GetTrackerToken(), GetTrackerOrgID())
+		client := tracker.NewClientWithAuth(GetTrackerToken(), GetTrackerAuthScheme(), GetTrackerOrgID())
 
 		log.Println("Starting sync from Yandex Tracker...")
 		if len(syncQueues) > 0 {

@@ -48,6 +48,8 @@
         .sync-status {
             font-size: 13px;
             color: #666;
+            display: flex;
+            align-items: center;
         }
 
         .sync-status.syncing {
@@ -55,6 +57,82 @@
         }
 
         .sync-status.error {
+            color: #d93025;
+        }
+
+        /* Animated circular sync progress */
+        .sync-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 10px 4px 4px;
+            background: linear-gradient(135deg, #e8f0fe 0%, #f8fbff 100%);
+            border-radius: 22px;
+            border: 1px solid #d2e3fc;
+        }
+
+        .progress-ring {
+            flex-shrink: 0;
+        }
+
+        .progress-ring-bg {
+            stroke: #d2e3fc;
+        }
+
+        .progress-ring-fg {
+            stroke: #1a73e8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.4s ease;
+        }
+
+        .progress-ring-rotate.indeterminate {
+            animation: ring-spin 1.2s linear infinite;
+            transform-origin: 16px 16px;
+        }
+
+        @keyframes ring-spin {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-ring-text {
+            font-size: 10px;
+            font-weight: 600;
+            fill: #1a73e8;
+        }
+
+        .sync-progress-info {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+            min-width: 0;
+        }
+
+        .sync-progress-stage {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1967d2;
+            white-space: nowrap;
+        }
+
+        .sync-progress-count {
+            font-size: 11px;
+            color: #5f6368;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sync-cancel {
+            margin-left: 4px;
+            padding: 2px 8px;
+            font-size: 14px;
+            line-height: 1;
+            background: rgba(0, 0, 0, 0.04);
+            color: #5f6368;
+            border-radius: 50%;
+        }
+
+        .sync-cancel:hover {
+            background: rgba(217, 48, 37, 0.12);
             color: #d93025;
         }
 

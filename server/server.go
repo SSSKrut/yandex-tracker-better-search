@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ytbs/searchapi"
+	syncer "ytbs/sync"
 )
 
 //go:embed templates/*
@@ -52,6 +53,9 @@ func NewServer(addr string, api *searchapi.Service, mcpHandler http.Handler) (*S
 		"safeHTML": func(s string) template.HTML {
 			return template.HTML(s)
 		},
+		"progressPercent":    progressPercent,
+		"progressStageLabel": progressStageLabel,
+		"sub100":             func(n int) int { return 100 - n },
 	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -63,6 +67,34 @@ func NewServer(addr string, api *searchapi.Service, mcpHandler http.Handler) (*S
 		addr:       addr,
 		mcpHandler: mcpHandler,
 	}, nil
+}
+
+// progressPercent maps a Progress event to a 0-100 integer for the circular
+// indicator. Returns 0 when the total is unknown so the ring shows an empty
+// (indeterminate-looking) state, and clamps the upper bound to 100.
+func progressPercent(p syncer.Progress) int {
+	if p.Total <= 0 || p.Current <= 0 {
+		return 0
+	}
+	pct := p.Current * 100 / p.Total
+	if pct > 100 {
+		return 100
+	}
+	return pct
+}
+
+// progressStageLabel renders a Russian label for the current sync stage.
+func progressStageLabel(stage string) string {
+	switch stage {
+	case syncer.StageIssues:
+		return "Загружаем задачи"
+	case syncer.StageComments:
+		return "Комментарии и файлы"
+	case syncer.StageIndexing:
+		return "Индексация"
+	default:
+		return "Синхронизация"
+	}
 }
 
 func formatDuration(n float64, one, few, many string) string {

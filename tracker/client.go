@@ -19,16 +19,33 @@ const (
 	defaultMaxTextFileSize = int64(2 * 1024 * 1024)
 )
 
+// AuthScheme selects the Authorization header format. Yandex Tracker accepts
+// either a long-lived OAuth token (`Authorization: OAuth <token>`) or a
+// short-lived IAM token (`Authorization: Bearer <token>`).
+type AuthScheme string
+
+const (
+	AuthOAuth AuthScheme = "OAuth"
+	AuthIAM   AuthScheme = "Bearer"
+)
+
 // Client - client for Yandex Tracker API
 type Client struct {
 	httpClient      *http.Client
 	token           string
+	authScheme      AuthScheme
 	orgID           string
 	maxTextFileSize int64
 }
 
-// NewClient - creates a new Tracker API client
+// NewClient - creates a new Tracker API client using an OAuth token.
 func NewClient(token, orgID string) *Client {
+	return NewClientWithAuth(token, AuthOAuth, orgID)
+}
+
+// NewClientWithAuth - creates a new Tracker API client with the given auth
+// scheme (OAuth or IAM/Bearer).
+func NewClientWithAuth(token string, scheme AuthScheme, orgID string) *Client {
 	maxTextFileSize := defaultMaxTextFileSize
 	if raw := os.Getenv("ATTACHMENT_TEXT_MAX_BYTES"); raw != "" {
 		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil && parsed > 0 {
@@ -36,11 +53,16 @@ func NewClient(token, orgID string) *Client {
 		}
 	}
 
+	if scheme != AuthIAM {
+		scheme = AuthOAuth
+	}
+
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 		token:           token,
+		authScheme:      scheme,
 		orgID:           orgID,
 		maxTextFileSize: maxTextFileSize,
 	}
@@ -66,7 +88,7 @@ func (c *Client) doRequestURL(ctx context.Context, method, url string, body any)
 		return nil, nil, fmt.Errorf("create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "OAuth "+c.token)
+	req.Header.Set("Authorization", string(c.authScheme)+" "+c.token)
 	req.Header.Set("X-Cloud-Org-ID", c.orgID)
 	req.Header.Set("Content-Type", "application/json")
 

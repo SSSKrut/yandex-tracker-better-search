@@ -34,7 +34,7 @@ Configure your MCP client (e.g. Claude Code) to launch:
 		// the client asks. The manager is constructed lazily-friendly: if
 		// TRACKER_* are missing, the underlying tracker.Client will fail at
 		// fetch time, not at construction. Read-only MCP usage never hits it.
-		client := tracker.NewClient(GetTrackerToken(), GetTrackerOrgID())
+		client := tracker.NewClientWithAuth(GetTrackerToken(), GetTrackerAuthScheme(), GetTrackerOrgID())
 		mgr := sync.NewManager(client, GetIndexer(), nil, 5, 0, 0)
 
 		api := searchapi.NewService(GetIndexer(), mgr)

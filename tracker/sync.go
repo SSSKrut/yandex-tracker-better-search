@@ -43,28 +43,64 @@ type SyncResult struct {
 	Errors        []error
 }
 
+// Sync stage names passed to ProgressFunc. They are intentionally short and
+// stable since they're surfaced to the UI.
+const (
+	ProgressStageIssues   = "issues"
+	ProgressStageComments = "comments"
+)
+
+// ProgressFunc receives incremental updates during a sync. total=0 means the
+// upper bound is not yet known (e.g. during scrolled issue pagination). The
+// callback is invoked from worker goroutines, so implementations must be
+// safe for concurrent use.
+type ProgressFunc func(stage string, current, total int)
+
+func noopProgress(string, int, int) {}
+
 // InitialSync - performs the initial synchronization: fetches all issues and their comments
 func (c *Client) InitialSync(ctx context.Context, queues []string, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	return c.InitialSyncWithProgress(ctx, queues, workers, nil)
+}
+
+// InitialSyncWithProgress is like InitialSync but emits progress events through
+// the supplied callback. Pass nil to disable progress reporting.
+func (c *Client) InitialSyncWithProgress(ctx context.Context, queues []string, workers int, progress ProgressFunc) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	if progress == nil {
+		progress = noopProgress
+	}
 	log.Println("Starting full sync...")
-	issues, err := c.FetchAllIssues(ctx, queues)
+	issues, err := c.fetchAllIssuesWithProgress(ctx, queues, progress)
 	if err != nil {
 		return nil, nil, &SyncResult{ProcessedAt: time.Now()}, err
 	}
 
-	return c.buildIndexed(ctx, issues, workers)
+	return c.buildIndexed(ctx, issues, workers, progress)
 }
 
 // IncrementalSync - performs synchronization for issues updated since a timestamp
 func (c *Client) IncrementalSync(ctx context.Context, since time.Time, queues []string, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	return c.IncrementalSyncWithProgress(ctx, since, queues, workers, nil)
+}
+
+// IncrementalSyncWithProgress is like IncrementalSync but emits progress
+// events through the supplied callback. Pass nil to disable progress reporting.
+func (c *Client) IncrementalSyncWithProgress(ctx context.Context, since time.Time, queues []string, workers int, progress ProgressFunc) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	if progress == nil {
+		progress = noopProgress
+	}
 	log.Printf("Starting incremental sync since %s...", since.Format("2006-01-02 15:04:05"))
-	issues, err := c.FetchUpdatedIssues(ctx, since, queues)
+	issues, err := c.fetchUpdatedIssuesWithProgress(ctx, since, queues, progress)
 	if err != nil {
 		return nil, nil, &SyncResult{ProcessedAt: time.Now()}, err
 	}
-	return c.buildIndexed(ctx, issues, workers)
+	return c.buildIndexed(ctx, issues, workers, progress)
 }
 
-func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int, progress ProgressFunc) ([]IndexedIssue, []IndexedFile, *SyncResult, error) {
+	if progress == nil {
+		progress = noopProgress
+	}
 	result := &SyncResult{ProcessedAt: time.Now()}
 	result.TotalIssues = len(issues)
 	if len(issues) == 0 {
@@ -72,6 +108,7 @@ func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int) 
 	}
 
 	log.Printf("Fetched %d issues, loading comments...", len(issues))
+	progress(ProgressStageComments, 0, len(issues))
 
 	if workers <= 0 {
 		workers = 5
@@ -128,6 +165,7 @@ func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int) 
 		if processed%100 == 0 {
 			log.Printf("Processing comments: %d/%d", processed, len(issues))
 		}
+		progress(ProgressStageComments, processed, len(issues))
 
 		if r.err != nil {
 			result.Errors = append(result.Errors, r.err)

@@ -124,7 +124,8 @@ curl -L https://github.com/<owner>/<repo>/releases/latest/download/ytbs_<version
 
 | Переменная | Назначение | Default |
 |------------|------------|---------|
-| `TRACKER_OAUTH_TOKEN` | OAuth-токен для Yandex Tracker v3 | - (нужен для `serve`/`sync`) |
+| `TRACKER_OAUTH_TOKEN` | OAuth-токен для Yandex Tracker v3 | - (нужен либо он, либо `TRACKER_IAM_TOKEN`) |
+| `TRACKER_IAM_TOKEN` | IAM-токен (Bearer) от Yandex Cloud. Имеет приоритет над OAuth, если заданы оба | - |
 | `TRACKER_CLOUD_ORG_ID` | Cloud Organization ID, шлётся как `X-Cloud-Org-ID` | - (нужен для `serve`/`sync`) |
 | `MANTICORE_URL` | HTTP API Manticore | `http://localhost:9308` |
 | `MCP_AUTH_TOKEN` | Bearer-токен для `/mcp`. Пусто = эндпоинт открыт | пусто |
