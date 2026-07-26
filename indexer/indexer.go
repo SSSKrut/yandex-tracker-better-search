@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,7 +27,12 @@ const (
 	minInfixIndexSize  = 2
 	issuesInfixFields  = "summary,description,comments_text"
 	filesInfixFields   = "file_name,content_text,metadata_text"
+
+	// fullTextWildcardChars - джокеры Manticore: экранирование их не обезвреживает.
+	fullTextWildcardChars = `\?%`
 )
+
+var issueKeyPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*-\d+$`)
 
 // Indexer - index for Manticoresearch
 type Indexer struct {
@@ -295,6 +301,9 @@ type SearchResult struct {
 	IsTextFile     bool      `json:"is_text_file"`
 	ParentIssueURL string    `json:"parent_issue_url"`
 	UpdatedAt      time.Time `json:"updated_at"`
+
+	// Exact - попадание по ссылке или ключу задачи, такие результаты идут первыми.
+	Exact bool `json:"-"`
 }
 
 func extractIssueRow(row map[string]interface{}) SearchResult {
@@ -376,44 +385,53 @@ func escapeSQL(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// escapeQuery - escapes special characters in the search query
+// escapeQuery - escapes special characters in the search query.
+//
+// Слэш удваивается намеренно: один уровень съест парсер строкового литерала SQL,
+// и до полнотекстового парсера доедет голый оператор ("P08: syntax error").
 func escapeQuery(query string, keepWildcards bool) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return ""
 	}
 
-	replacements := []string{
-		"\\", "\\\\",
-		"'", "\\'",
-		"\"", "\\\"",
-		":", "\\:",
-		"@", "\\@",
-		"!", "\\!",
-		"^", "\\^",
-		"~", "\\~",
-		"/", "\\/",
-		"[", "\\[",
-		"]", "\\]",
-		"{", "\\{",
-		"}", "\\}",
-		"|", "\\|",
-		"&", "\\&",
-		"=", "\\=",
-		"<", "\\<",
-		">", "\\>",
-		"?", "\\?",
-		"(", "\\(",
-		")", "\\)",
-		"-", "\\-",
-	}
-	if !keepWildcards {
-		replacements = append(replacements, "*", "\\*")
+	var b strings.Builder
+	b.Grow(len(query) * 2)
+
+	for _, r := range query {
+		switch {
+		case r == '\'':
+			// Оператором полнотекста не является — экранируем только для SQL.
+			b.WriteString(`\'`)
+		case r == '*':
+			if keepWildcards {
+				b.WriteRune(r)
+			} else {
+				b.WriteByte(' ')
+			}
+		case strings.ContainsRune(fullTextWildcardChars, r):
+			// Экранированный джокер остаётся в токене и не находится никогда.
+			b.WriteByte(' ')
+		case isFullTextPunct(r):
+			b.WriteString(`\\`)
+			b.WriteRune(r)
+		case unicode.IsControl(r):
+			b.WriteByte(' ')
+		default:
+			b.WriteRune(r)
+		}
 	}
 
-	replacer := strings.NewReplacer(replacements...)
-	escaped := replacer.Replace(query)
-	return strings.Join(strings.Fields(escaped), " ")
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// isFullTextPunct - ASCII-пунктуация для полнотекстового парсера. Экранированный
+// символ он трактует как разделитель токенов, так что экранировать с запасом безопасно.
+func isFullTextPunct(r rune) bool {
+	if r > unicode.MaxASCII || !unicode.IsPrint(r) {
+		return false
+	}
+	return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsSpace(r)
 }
 
 // getStringFromMap - safely gets a string value from a map
@@ -590,7 +608,10 @@ func (idx *Indexer) SearchWithFilters(ctx context.Context, query string, filters
 	}
 
 	results := append(issues, files...)
-	sort.Slice(results, func(i, j int) bool {
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Exact != results[j].Exact {
+			return results[i].Exact
+		}
 		return results[i].UpdatedAt.After(results[j].UpdatedAt)
 	})
 
@@ -602,56 +623,75 @@ func (idx *Indexer) SearchWithFilters(ctx context.Context, query string, filters
 }
 
 func (idx *Indexer) searchIssuesWithFilters(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
-	whereClause := buildWhereClause(query, filters, "url")
+	const columns = `id, issue_key, url, summary, status_name, assignee_name, queue, priority, updated_at,
+        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'summary,description,comments_text') as highlight`
 
-	searchSQL := fmt.Sprintf(
-		`SELECT id, issue_key, url, summary, status_name, assignee_name, queue, priority, updated_at,
-        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'summary,description,comments_text') as highlight
- FROM %s
- %s
- ORDER BY updated_at DESC
- LIMIT %d`,
-		issuesTableName, whereClause, limit)
-
-	req := idx.client.UtilsAPI.Sql(ctx).Body(searchSQL)
-	resp, _, err := req.Execute()
+	results, err := idx.searchTable(ctx, issuesTableName, columns, buildWhereClauses(query, filters, "url"), limit, extractIssueRow)
 	if err != nil {
-		return nil, fmt.Errorf("search issues: %w", formatSQLError(err, searchSQL))
+		return nil, fmt.Errorf("search issues: %w", err)
 	}
-
-	var results []SearchResult
-	if resp.ArrayOfMapmapOfStringAny != nil {
-		for _, queryResult := range *resp.ArrayOfMapmapOfStringAny {
-			if dataRows, ok := queryResult["data"].([]interface{}); ok {
-				for _, rowRaw := range dataRows {
-					if rowMap, ok := rowRaw.(map[string]interface{}); ok {
-						results = append(results, extractIssueRow(rowMap))
-					}
-				}
-			}
-		}
-	}
-
 	return results, nil
 }
 
 func (idx *Indexer) searchFilesWithFilters(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
-	whereClause := buildWhereClause(query, filters, "file_url")
-
-	searchSQL := fmt.Sprintf(
-		`SELECT id, issue_key, issue_url, file_url, file_name, status_name, assignee_name, queue, priority,
+	const columns = `id, issue_key, issue_url, file_url, file_name, status_name, assignee_name, queue, priority,
         mime_type, source, size, is_text, updated_at,
-        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'file_name,content_text,metadata_text') as highlight
+        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'file_name,content_text,metadata_text') as highlight`
+
+	results, err := idx.searchTable(ctx, filesTableName, columns, buildWhereClauses(query, filters, "file_url"), limit, extractFileRow)
+	if err != nil {
+		return nil, fmt.Errorf("search files: %w", err)
+	}
+	return results, nil
+}
+
+// searchTable – executes the WHERE clauses one by one, merging the results to remove duplicates
+func (idx *Indexer) searchTable(
+	ctx context.Context,
+	table, columns string,
+	clauses []whereClause,
+	limit int,
+	extract func(map[string]interface{}) SearchResult,
+) ([]SearchResult, error) {
+	var results []SearchResult
+	seen := map[string]int{}
+
+	for _, clause := range clauses {
+		searchSQL := fmt.Sprintf(
+			`SELECT %s
  FROM %s
  %s
  ORDER BY updated_at DESC
  LIMIT %d`,
-		filesTableName, whereClause, limit)
+			columns, table, clause.sql, limit)
 
+		rows, err := idx.fetchSearchRows(ctx, searchSQL, extract)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, row := range rows {
+			key := row.Kind + "|" + row.ID
+			if pos, ok := seen[key]; ok {
+				if clause.exact {
+					results[pos].Exact = true
+				}
+				continue
+			}
+			seen[key] = len(results)
+			row.Exact = clause.exact
+			results = append(results, row)
+		}
+	}
+
+	return results, nil
+}
+
+func (idx *Indexer) fetchSearchRows(ctx context.Context, searchSQL string, extract func(map[string]interface{}) SearchResult) ([]SearchResult, error) {
 	req := idx.client.UtilsAPI.Sql(ctx).Body(searchSQL)
 	resp, _, err := req.Execute()
 	if err != nil {
-		return nil, fmt.Errorf("search files: %w", formatSQLError(err, searchSQL))
+		return nil, formatSQLError(err, searchSQL)
 	}
 
 	var results []SearchResult
@@ -660,7 +700,7 @@ func (idx *Indexer) searchFilesWithFilters(ctx context.Context, query string, fi
 			if dataRows, ok := queryResult["data"].([]interface{}); ok {
 				for _, rowRaw := range dataRows {
 					if rowMap, ok := rowRaw.(map[string]interface{}); ok {
-						results = append(results, extractFileRow(rowMap))
+						results = append(results, extract(rowMap))
 					}
 				}
 			}
@@ -670,12 +710,52 @@ func (idx *Indexer) searchFilesWithFilters(ctx context.Context, query string, fi
 	return results, nil
 }
 
-func buildWhereClause(query string, filters SearchFilters, urlField string) string {
-	var conditions []string
+type whereClause struct {
+	sql   string
+	exact bool
+}
 
-	if queryCondition := buildQueryCondition(query, urlField); queryCondition != "" {
-		conditions = append(conditions, queryCondition)
+// buildWhereClauses – a full-text version of WHERE and, for a reference or task key,
+// an attribute-based version. These cannot be combined into a single SQL statement: Manticore does not support either an OR operator between
+// MATCH() and an attribute filter, or LIKE on string attributes.
+func buildWhereClauses(query string, filters SearchFilters, urlField string) []whereClause {
+	filterConditions := buildFilterConditions(filters)
+	queryCondition := buildQueryCondition(query)
+	attributeCondition := buildAttributeCondition(query, urlField)
+
+	if queryCondition == "" && attributeCondition == "" {
+		if strings.TrimSpace(query) != "" {
+			return nil
+		}
+		return []whereClause{{sql: joinConditions("", filterConditions)}}
 	}
+
+	clauses := make([]whereClause, 0, 2)
+	if queryCondition != "" {
+		clauses = append(clauses, whereClause{sql: joinConditions(queryCondition, filterConditions)})
+	}
+	if attributeCondition != "" {
+		clauses = append(clauses, whereClause{sql: joinConditions(attributeCondition, filterConditions), exact: true})
+	}
+
+	return clauses
+}
+
+func joinConditions(primary string, filterConditions []string) string {
+	conditions := make([]string, 0, len(filterConditions)+1)
+	if primary != "" {
+		conditions = append(conditions, primary)
+	}
+	conditions = append(conditions, filterConditions...)
+
+	if len(conditions) == 0 {
+		return ""
+	}
+	return "WHERE " + strings.Join(conditions, " AND ")
+}
+
+func buildFilterConditions(filters SearchFilters) []string {
+	var conditions []string
 
 	if filters.Queue != "" {
 		conditions = append(conditions, fmt.Sprintf("queue = '%s'", escapeSQL(filters.Queue)))
@@ -693,13 +773,10 @@ func buildWhereClause(query string, filters SearchFilters, urlField string) stri
 		conditions = append(conditions, fmt.Sprintf("assignee_name = '%s'", escapeSQL(filters.Assignee)))
 	}
 
-	if len(conditions) > 0 {
-		return "WHERE " + strings.Join(conditions, " AND ")
-	}
-	return ""
+	return conditions
 }
 
-func buildQueryCondition(rawQuery, urlField string) string {
+func buildQueryCondition(rawQuery string) string {
 	query := strings.TrimSpace(rawQuery)
 	if query == "" {
 		return ""
@@ -707,24 +784,104 @@ func buildQueryCondition(rawQuery, urlField string) string {
 
 	matchVariants := buildMatchVariants(query)
 	escapedVariants := make([]string, 0, len(matchVariants))
+	seen := map[string]struct{}{}
+
 	for _, variant := range matchVariants {
 		escaped := escapeQuery(variant, strings.Contains(variant, "*"))
-		if escaped != "" {
-			escapedVariants = append(escapedVariants, escaped)
+		if !hasSearchableContent(escaped) {
+			continue
 		}
+		if _, ok := seen[escaped]; ok {
+			continue
+		}
+		seen[escaped] = struct{}{}
+		// Скобки обязательны: `|` связывает сильнее неявного AND, и без группировки
+		// `a b | a* b*` разбирается как `a (b | a*) b*`.
+		escapedVariants = append(escapedVariants, "("+escaped+")")
 	}
 
 	if len(escapedVariants) == 0 {
 		return ""
 	}
 
-	matchExpr := strings.Join(escapedVariants, " | ")
-	condition := fmt.Sprintf("MATCH('%s')", matchExpr)
-	if looksLikeURL(query) {
-		condition = "(" + condition + fmt.Sprintf(" OR %s LIKE '%%%s%%')", urlField, escapeSQL(query)) + ")"
+	return fmt.Sprintf("MATCH('%s')", strings.Join(escapedVariants, " | "))
+}
+
+func hasSearchableContent(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildAttributeCondition - условие для поиска по ссылке или ключу задачи:
+// url и issue_key лежат в атрибутах, а не в полнотекстовых полях, и MATCH их не видит.
+func buildAttributeCondition(rawQuery, urlField string) string {
+	query := strings.TrimSpace(rawQuery)
+	if query == "" {
+		return ""
 	}
 
-	return condition
+	var conditions []string
+
+	if key := extractIssueKey(query); key != "" {
+		conditions = append(conditions, fmt.Sprintf("issue_key = '%s'", escapeSQL(key)))
+	}
+
+	if target := urlRegexTarget(query); target != "" {
+		// Якорь в конце нужен, чтобы ссылка на NOVA-42 не притащила ещё и NOVA-429.
+		pattern := escapeSQL(regexp.QuoteMeta(target) + "$")
+		conditions = append(conditions, fmt.Sprintf("REGEX(%s, '%s')", urlField, pattern))
+	}
+
+	switch len(conditions) {
+	case 0:
+		return ""
+	case 1:
+		return conditions[0]
+	default:
+		return "(" + strings.Join(conditions, " OR ") + ")"
+	}
+}
+
+// extractIssueKey - ключ задачи из запроса ("NOVA-42") или из сегмента ссылки,
+// в том числе ссылки без схемы ("tracker.yandex.ru/NOVA-42").
+func extractIssueKey(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" || len(strings.Fields(query)) != 1 {
+		return ""
+	}
+
+	if issueKeyPattern.MatchString(query) {
+		return strings.ToUpper(query)
+	}
+
+	segments := strings.FieldsFunc(query, func(r rune) bool {
+		return r == '/' || r == '?' || r == '#'
+	})
+	for i := len(segments) - 1; i >= 0; i-- {
+		if issueKeyPattern.MatchString(segments[i]) {
+			return strings.ToUpper(segments[i])
+		}
+	}
+
+	return ""
+}
+
+// urlRegexTarget - ссылка без фрагмента и завершающего слэша: в сохранённом url их нет.
+func urlRegexTarget(query string) string {
+	query = strings.TrimSpace(query)
+	if !looksLikeURL(query) || len(strings.Fields(query)) != 1 {
+		return ""
+	}
+
+	if hash := strings.IndexByte(query, '#'); hash >= 0 {
+		query = query[:hash]
+	}
+
+	return strings.TrimRight(query, "/")
 }
 
 func buildMatchVariants(query string) []string {
