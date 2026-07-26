@@ -8,11 +8,18 @@ services:
       - 9308:9308  # HTTP API
     volumes:
       - manticore_data:/var/lib/manticore
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "--post-data=query=SHOW TABLES", "http://127.0.0.1:9308/sql?mode=raw"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
 
   ytbs:
     build: .
     depends_on:
-      - manticore
+      manticore:
+        condition: service_healthy
     ports:
       - "8080:8080"
     env_file:
