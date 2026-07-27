@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
-	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
-	syncer "github.com/SSSKrut/yandex-tracker-better-search/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
+	syncer "github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )

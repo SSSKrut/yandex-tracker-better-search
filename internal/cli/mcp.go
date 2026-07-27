@@ -1,13 +1,13 @@
-package cmd
+package cli
 
 import (
 	"log"
 	"os"
 
-	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/mcp"
-	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
-	"github.com/SSSKrut/yandex-tracker-better-search/sync"
-	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
+	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/internal/mcp"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"

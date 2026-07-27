@@ -12,8 +12,8 @@ import (
 	stdsync "sync"
 	"time"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
-	syncer "github.com/SSSKrut/yandex-tracker-better-search/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
+	syncer "github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
 )
 
 // DefaultTruncateChars caps description and comments length when GetIssue is

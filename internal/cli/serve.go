@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"log"
@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/mcp"
-	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
-	"github.com/SSSKrut/yandex-tracker-better-search/server"
-	"github.com/SSSKrut/yandex-tracker-better-search/sync"
-	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
+	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/internal/mcp"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/server"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	"github.com/spf13/cobra"
 )

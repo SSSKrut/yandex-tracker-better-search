@@ -8,7 +8,7 @@ before:
 
 builds:
   - id: ytbs
-    main: ./
+    main: ./cmd/ytbs
     binary: ytbs
     env:
       - CGO_ENABLED=0
@@ -26,9 +26,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/SSSKrut/yandex-tracker-better-search/cmd.version={{.Version}}
-      - -X github.com/SSSKrut/yandex-tracker-better-search/cmd.commit={{.Commit}}
-      - -X github.com/SSSKrut/yandex-tracker-better-search/cmd.date={{.CommitDate}}
+      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.version={{.Version}}
+      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.commit={{.Commit}}
+      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.date={{.CommitDate}}
 
 archives:
   - id: default

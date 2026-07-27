@@ -1,9 +1,9 @@
-package cmd
+package cli
 
 import (
 	"log"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	"github.com/spf13/cobra"
 )

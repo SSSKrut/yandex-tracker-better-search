@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
-	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	"github.com/spf13/cobra"
 )

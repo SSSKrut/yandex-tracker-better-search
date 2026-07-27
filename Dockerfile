@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . ./
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/ytbs ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/ytbs ./cmd/ytbs
 
 FROM gcr.io/distroless/base-debian12
 

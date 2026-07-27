@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	Manticoresearch "github.com/manticoresoftware/manticoresearch-go"
 )
