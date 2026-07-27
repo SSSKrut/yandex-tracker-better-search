@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"ytbs/indexer"
-	"ytbs/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
 )
 
 // Stage names that appear in Progress.Stage during an in-flight sync. The UI

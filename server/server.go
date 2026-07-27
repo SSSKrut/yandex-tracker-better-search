@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"ytbs/searchapi"
-	syncer "ytbs/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
+	syncer "github.com/SSSKrut/yandex-tracker-better-search/sync"
 )
 
 //go:embed templates/*

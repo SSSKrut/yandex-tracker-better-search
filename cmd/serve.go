@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	ytbsmcp "ytbs/mcp"
-	"ytbs/searchapi"
-	"ytbs/server"
-	"ytbs/sync"
-	"ytbs/tracker"
+	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/mcp"
+	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
+	"github.com/SSSKrut/yandex-tracker-better-search/server"
+	"github.com/SSSKrut/yandex-tracker-better-search/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
 
 	"github.com/spf13/cobra"
 )

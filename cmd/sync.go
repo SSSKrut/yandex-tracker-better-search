@@ -3,7 +3,7 @@ package cmd
 import (
 	"log"
 
-	"ytbs/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
 
 	"github.com/spf13/cobra"
 )

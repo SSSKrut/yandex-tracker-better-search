@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ytbs/indexer"
-	"ytbs/tracker"
+	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
 
 	"github.com/spf13/cobra"
 )

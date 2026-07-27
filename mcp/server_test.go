@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"ytbs/indexer"
-	"ytbs/searchapi"
-	syncer "ytbs/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
+	syncer "github.com/SSSKrut/yandex-tracker-better-search/sync"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )

@@ -4,10 +4,10 @@ import (
 	"log"
 	"os"
 
-	ytbsmcp "ytbs/mcp"
-	"ytbs/searchapi"
-	"ytbs/sync"
-	"ytbs/tracker"
+	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/mcp"
+	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
+	"github.com/SSSKrut/yandex-tracker-better-search/sync"
+	"github.com/SSSKrut/yandex-tracker-better-search/tracker"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"

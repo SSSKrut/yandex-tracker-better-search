@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ytbs/cmd"
+	"github.com/SSSKrut/yandex-tracker-better-search/cmd"
 )
 
 func main() {

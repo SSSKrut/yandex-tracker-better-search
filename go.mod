@@ -1,4 +1,4 @@
-module ytbs
+module github.com/SSSKrut/yandex-tracker-better-search
 
 go 1.25.5
 

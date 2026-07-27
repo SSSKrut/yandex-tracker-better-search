@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"ytbs/searchapi"
+	"github.com/SSSKrut/yandex-tracker-better-search/searchapi"
 )
 
 // handleIndex - main page
