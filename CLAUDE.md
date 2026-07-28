@@ -46,9 +46,9 @@ Optional tuning: `ATTACHMENT_TEXT_MAX_BYTES`, `SYNC_OVERLAP`, `SYNC_STATE_PATH`,
 
 ## Architecture
 
-Layout: `cmd/<binary>/` holds the entrypoints (only `cmd/ytbs` today) and is the sole non-`internal` package tree; everything else lives under `internal/`. The repo root carries no Go code.
+Layout: the whole CLI layer — `main`, the Cobra commands, flag wiring and console output — lives in `cmd/ytbs/` as `package main`. Everything else (the guts) sits under `internal/`. The repo root carries no Go code.
 
-Entry point is `cmd/ytbs/main.go` → `cli.Execute()` (Cobra). `internal/cli/root.go` has a `PersistentPreRunE` that constructs the singleton `*indexer.Indexer` and a SIGINT/SIGTERM-cancellable `ctx` shared via `cli.GetContext()` / `GetIndexer()` / `GetTrackerToken()` / `GetTrackerOrgID()` — subcommands (`serve`, `sync`, `search`) read from these getters rather than rebuilding state.
+Entry point is `cmd/ytbs/root.go`, whose `PersistentPreRunE` constructs the singleton `*indexer.Indexer` and a SIGINT/SIGTERM-cancellable `ctx` shared via `GetContext()` / `GetIndexer()` / `GetTrackerToken()` / `GetTrackerOrgID()` — subcommands (`serve`, `sync`, `search`, `mcp`) read from these getters rather than rebuilding state.
 
 Layers, in dependency order:
 
@@ -63,7 +63,7 @@ Layers, in dependency order:
 - The two Manticore tables (`issuesTableName`, `filesTableName`) and their infix-field lists are defined as constants at the top of `internal/indexer/indexer.go`. Schema changes need matching updates in `CreateTable`, `IndexIssues`/`IndexFiles`, and the search column lists in `searchIssuesWithFilters` / `searchFilesWithFilters`.
 - `internal/server` depends on the unexported `searchService` interface, not on `*searchapi.Service` directly, so handlers are testable with a fake. A handler that starts using a new `Service` method must add it to that interface.
 - IDs: when the upstream `id` is non-numeric, `hashString` derives a stable int64 (issues key off `Key`; files key off `IssueKey|FileName|FileURL`). Don't switch to a different hash without re-indexing.
-- Release version stamping (`.goreleaser.yaml`) injects `-X .../internal/cli.version`; a wrong path is silently ignored by the linker, so keep it in sync when the CLI package moves.
+- Release version stamping (`.goreleaser.yaml`) and `task build` inject `-X main.version` / `.commit` / `.date`. A wrong symbol path is silently ignored by the linker — the build succeeds with an empty version — so these stay valid only while the metadata vars live in `package main`.
 - The CLI's `PersistentPreRunE` calls `log.Fatal` on missing env vars — adding new commands that don't need Tracker/Manticore would still trip this; gate with `cobra.Command.PersistentPreRunE` overrides if needed.
 - Russian and English comments coexist in source; UI strings (`templates/*.html`, time-ago formatting in `internal/server/server.go`) are Russian.
 - `.env` in the repo root may contain real credentials in some checkouts — never commit modifications to it; use `.env.example` for documentation.

@@ -1,4 +1,4 @@
-package cli
+package main
 
 import (
 	"context"
@@ -16,9 +16,7 @@ import (
 
 const defaultManticoreURL = "http://localhost:9308"
 
-// Build-time metadata. Overridden by goreleaser via -ldflags
-// (-X <module>/internal/cli.version=... и т.д.) — путь пакета зашит в
-// .goreleaser.yaml, при переезде пакета его надо обновлять вручную.
+// Build-time metadata. Overridden by goreleaser via -ldflags (-X main.version=...).
 var (
 	version = "dev"
 	commit  = "none"
@@ -95,8 +93,7 @@ func RequireTrackerEnv() error {
 	return nil
 }
 
-// Execute — main execution function
-func Execute() {
+func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}

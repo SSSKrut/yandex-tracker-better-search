@@ -5,7 +5,6 @@ dotenv: ['.env']
 vars:
   BINARY: ytbs
   MAIN: ./cmd/ytbs
-  CLI_PKG: github.com/SSSKrut/yandex-tracker-better-search/internal/cli
   MANTICORE: '{{.MANTICORE_URL | default "http://localhost:9308"}}'
 
 tasks:
@@ -27,9 +26,9 @@ tasks:
     cmds:
       - >-
         go build -trimpath
-        -ldflags "-X {{.CLI_PKG}}.version={{.VERSION}}
-        -X {{.CLI_PKG}}.commit={{.COMMIT}}
-        -X {{.CLI_PKG}}.date={{.DATE}}"
+        -ldflags "-X main.version={{.VERSION}}
+        -X main.commit={{.COMMIT}}
+        -X main.date={{.DATE}}"
         -o {{.BINARY}} {{.MAIN}}
 
   run:

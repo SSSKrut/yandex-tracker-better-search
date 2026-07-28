@@ -26,9 +26,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.version={{.Version}}
-      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.commit={{.Commit}}
-      - -X github.com/SSSKrut/yandex-tracker-better-search/internal/cli.date={{.CommitDate}}
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
 
 archives:
   - id: default
