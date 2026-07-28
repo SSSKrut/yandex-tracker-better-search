@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -17,6 +18,41 @@ func TestStripHTML(t *testing.T) {
 		if got := stripHTML(in); got != want {
 			t.Fatalf("stripHTML(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestStripHTML_DoesNotManufactureMarkup(t *testing.T) {
+	// Раньше сущности декодировались ПОСЛЕ вырезания тегов, поэтому чистка
+	// сама создавала разметку: экранированный в трекере тег оживал в индексе.
+	cases := []string{
+		"&lt;script&gt;alert(1)&lt;/script&gt;",
+		"&amp;lt;img src=x onerror=alert(1)&amp;gt;",
+		"&#60;img src=x onerror=alert(1)&#62;",
+		"<img src=x onerror=alert(1)>",
+		"<svg/onload=alert(1)>",
+	}
+
+	for _, in := range cases {
+		got := stripHTML(in)
+		if strings.Contains(got, "<") || strings.Contains(got, ">") {
+			t.Errorf("stripHTML(%q) = %q, want no markup left", in, got)
+		}
+	}
+}
+
+func TestConvertToIndexed_SanitizesSummary(t *testing.T) {
+	// Summary раньше уезжал в индекс сырым и оттуда попадал в /api/map.
+	issue := Issue{
+		Key:     "PRJ-1",
+		Summary: "Кнопка <img src=x onerror=alert(1)> не работает",
+	}
+
+	got := convertToIndexed(issue, nil).Summary
+	if strings.Contains(got, "<") || strings.Contains(got, ">") {
+		t.Errorf("Summary = %q, want the markup stripped", got)
+	}
+	if !strings.Contains(got, "Кнопка") {
+		t.Errorf("Summary = %q, want the text preserved", got)
 	}
 }
 

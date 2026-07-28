@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"context"
+	"html"
 	"log"
 	"regexp"
 	"strings"
@@ -205,7 +206,7 @@ func convertToIndexed(issue Issue, comments []Comment) IndexedIssue {
 		ID:          issue.ID,
 		Key:         issue.Key,
 		URL:         "https://tracker.yandex.ru/" + issue.Key,
-		Summary:     issue.Summary,
+		Summary:     stripHTML(issue.Summary),
 		Description: stripHTML(issue.Description),
 		Queue:       issue.Queue.Key,
 		Status:      issue.Status.Key,
@@ -241,21 +242,18 @@ func convertToIndexed(issue Issue, comments []Comment) IndexedIssue {
 	return indexed
 }
 
-// stripHTML - removes HTML tags from a string
+var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// stripHTML - превращает HTML трекера в плоский текст.
+//
+// Сущности декодируются ДО вырезания тегов. В обратном порядке декодирование
+// изготавливало разметку уже после чистки: &amp;lt;img onerror=...&amp;gt;
+// из описания задачи попадало в индекс живым тегом.
 func stripHTML(s string) string {
-	// TODO: check for library for more robust HTML stripping
-	re := regexp.MustCompile(`<[^>]*>`)
-	s = re.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	// UnescapeString отдаёт за &nbsp; неразрывный пробел — для индекса это мусор.
+	s = strings.ReplaceAll(s, "\u00a0", " ")
+	s = htmlTagPattern.ReplaceAllString(s, "")
 
-	// decode common HTML entities
-	s = strings.ReplaceAll(s, "&nbsp;", " ")
-	s = strings.ReplaceAll(s, "&amp;", "&")
-	s = strings.ReplaceAll(s, "&lt;", "<")
-	s = strings.ReplaceAll(s, "&gt;", ">")
-	s = strings.ReplaceAll(s, "&quot;", "\"")
-
-	// remove extra spaces
-	s = strings.TrimSpace(s)
-
-	return s
+	return strings.TrimSpace(s)
 }

@@ -347,3 +347,28 @@ func TestStart_NoMCPHandler(t *testing.T) {
 		t.Errorf("GET /mcp = %d, want 404 when MCP is disabled", resp.StatusCode)
 	}
 }
+
+func TestHandleSearch_HighlightIsEscapedEndToEnd(t *testing.T) {
+	// Через настоящий шаблон: подсветка из Manticore приходит маркерами вперемешку
+	// с текстом задачи, и наружу должны выйти только наши <b>.
+	api := &fakeAPI{results: []searchapi.IndexerSearchResult{{
+		Kind: "issue", Key: "NOVA-1", Summary: "тест",
+		Highlight: indexer.HighlightOpen + "кнопка" + indexer.HighlightClose +
+			` <img src=x onerror=alert(1)><script>alert(2)</script>`,
+	}}}
+	srv := newTestServer(t, api)
+
+	body := do(t, srv.handleSearch, http.MethodGet, "/api/search?q=кнопка").Body.String()
+
+	const want = `<div class="result-highlight"><b>кнопка</b> ` +
+		`&lt;img src=x onerror=alert(1)&gt;&lt;script&gt;alert(2)&lt;/script&gt;</div>`
+	if !strings.Contains(body, want) {
+		t.Errorf("highlight block rendered unsafely.\nwant to contain: %s", want)
+	}
+	// Ни одного тега из payload — <b> закрывается до начала пользовательского текста.
+	for _, bad := range []string{"<script", "<img"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("payload leaked a tag into the page: %q", bad)
+		}
+	}
+}

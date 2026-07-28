@@ -30,6 +30,14 @@ const (
 
 	// fullTextWildcardChars - джокеры Manticore: экранирование их не обезвреживает.
 	fullTextWildcardChars = `\?%`
+
+	// HighlightOpen/HighlightClose - границы совпадения в HIGHLIGHT(). Это не HTML:
+	// подсветка приходит вперемешку с текстом задачи, который в браузер попадать
+	// сырым не должен. Слой отображения экранирует строку целиком и только потом
+	// заменяет маркеры на теги. Управляющие символы взяты намеренно — escapeSQL
+	// вырезает их из индексируемого текста, так что подделать маркер невозможно.
+	HighlightOpen  = "\x02"
+	HighlightClose = "\x03"
 )
 
 var issueKeyPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*-\d+$`)
@@ -623,8 +631,9 @@ func (idx *Indexer) SearchWithFilters(ctx context.Context, query string, filters
 }
 
 func (idx *Indexer) searchIssuesWithFilters(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
-	const columns = `id, issue_key, url, summary, status_name, assignee_name, queue, priority, updated_at,
-        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'summary,description,comments_text') as highlight`
+	columns := fmt.Sprintf(`id, issue_key, url, summary, status_name, assignee_name, queue, priority, updated_at,
+        HIGHLIGHT({before_match='%s', after_match='%s'}, 'summary,description,comments_text') as highlight`,
+		HighlightOpen, HighlightClose)
 
 	results, err := idx.searchTable(ctx, issuesTableName, columns, buildWhereClauses(query, filters, "url"), limit, extractIssueRow)
 	if err != nil {
@@ -634,9 +643,10 @@ func (idx *Indexer) searchIssuesWithFilters(ctx context.Context, query string, f
 }
 
 func (idx *Indexer) searchFilesWithFilters(ctx context.Context, query string, filters SearchFilters, limit int) ([]SearchResult, error) {
-	const columns = `id, issue_key, issue_url, file_url, file_name, status_name, assignee_name, queue, priority,
+	columns := fmt.Sprintf(`id, issue_key, issue_url, file_url, file_name, status_name, assignee_name, queue, priority,
         mime_type, source, size, is_text, updated_at,
-        HIGHLIGHT({before_match='<b>', after_match='</b>'}, 'file_name,content_text,metadata_text') as highlight`
+        HIGHLIGHT({before_match='%s', after_match='%s'}, 'file_name,content_text,metadata_text') as highlight`,
+		HighlightOpen, HighlightClose)
 
 	results, err := idx.searchTable(ctx, filesTableName, columns, buildWhereClauses(query, filters, "file_url"), limit, extractFileRow)
 	if err != nil {

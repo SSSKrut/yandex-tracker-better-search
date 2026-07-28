@@ -393,12 +393,16 @@
 
         function updateStats(data) {
             const stats = data.stats || {};
-            statsEl.innerHTML = `
-                <div>Задач: <strong>${stats.issues || 0}</strong></div>
-                <div>Файлов: <strong>${stats.files || 0}</strong></div>
-                <div>Точек: <strong>${stats.points || 0}</strong></div>
-                <div>Кластеров: <strong>${stats.clusters || 0}</strong></div>
-            `;
+            statsEl.replaceChildren();
+            [['Задач: ', stats.issues], ['Файлов: ', stats.files],
+             ['Точек: ', stats.points], ['Кластеров: ', stats.clusters]].forEach(([label, value]) => {
+                const row = document.createElement('div');
+                row.appendChild(document.createTextNode(label));
+                const strong = document.createElement('strong');
+                strong.textContent = Number(value) || 0;
+                row.appendChild(strong);
+                statsEl.appendChild(row);
+            });
         }
 
         function updateLegend(data) {
@@ -414,18 +418,62 @@
             }
         }
 
+        // Заголовки, ключи и ссылки приходят из трекера, поэтому собираются узлами
+        // через textContent, а не склейкой разметки: строка вида
+        // "<img src=x onerror=...>" в заголовке задачи иначе выполнилась бы.
+        function textRow(label, value) {
+            const row = document.createElement('div');
+            if (label) row.appendChild(document.createTextNode(label));
+            row.appendChild(document.createTextNode(value));
+            return row;
+        }
+
+        // safeURL пропускает только http(s): file_url приходит из трекера,
+        // а javascript:-ссылка в href сработала бы по клику.
+        function safeURL(raw) {
+            try {
+                const u = new URL(raw, window.location.origin);
+                return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function linkRow(label, href, text) {
+            const row = document.createElement('div');
+            const url = safeURL(href);
+            if (!url) {
+                row.textContent = text;
+                return row;
+            }
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = text;
+            if (label) row.appendChild(document.createTextNode(label));
+            row.appendChild(a);
+            return row;
+        }
+
         function setSelected(point) {
             if (!point) return;
             selectedId = point.id;
-            selectedEl.innerHTML = `
-                <div><strong>${point.title || point.key}</strong></div>
-                <div>Тип: ${point.kind === 'file' ? 'Файл' : 'Задача'}</div>
-                <div>Ключ: ${point.key || '-'}</div>
-                <div><a href="${point.url}" target="_blank">Открыть</a></div>
-                ${point.parent_issue_url ? `<div><a href="${point.parent_issue_url}" target="_blank">Родительская задача</a></div>` : ''}
-            `;
 
-            neighborsEl.innerHTML = '';
+            selectedEl.replaceChildren();
+            const title = document.createElement('div');
+            const strong = document.createElement('strong');
+            strong.textContent = point.title || point.key || '';
+            title.appendChild(strong);
+            selectedEl.appendChild(title);
+            selectedEl.appendChild(textRow('Тип: ', point.kind === 'file' ? 'Файл' : 'Задача'));
+            selectedEl.appendChild(textRow('Ключ: ', point.key || '-'));
+            selectedEl.appendChild(linkRow('', point.url, 'Открыть'));
+            if (point.parent_issue_url) {
+                selectedEl.appendChild(linkRow('', point.parent_issue_url, 'Родительская задача'));
+            }
+
+            neighborsEl.replaceChildren();
             if (!point.neighbors || point.neighbors.length === 0) {
                 neighborsEl.textContent = '-';
             } else {
@@ -434,10 +482,14 @@
                     if (!neighbor) return;
                     const item = document.createElement('div');
                     item.className = 'neighbor-item';
-                    item.innerHTML = `
-                        <a href="${neighbor.url}" target="_blank">${neighbor.title || neighbor.key}</a>
-                        <span class="neighbor-score">${n.score.toFixed(2)}</span>
-                    `;
+
+                    const link = linkRow('', neighbor.url, neighbor.title || neighbor.key || '');
+                    const score = document.createElement('span');
+                    score.className = 'neighbor-score';
+                    score.textContent = n.score.toFixed(2);
+                    item.appendChild(link);
+                    item.appendChild(score);
+
                     item.addEventListener('click', () => {
                         setSelected(neighbor);
                         render();

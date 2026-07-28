@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"embed"
+	"html"
 	"html/template"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
@@ -64,9 +66,7 @@ func NewServer(addr string, api searchService, mcpHandler http.Handler) (*Server
 				return t.Format("02.01.2006 15:04")
 			}
 		},
-		"safeHTML": func(s string) template.HTML {
-			return template.HTML(s)
-		},
+		"highlight":          highlightHTML,
 		"progressPercent":    progressPercent,
 		"progressStageLabel": progressStageLabel,
 		"sub100":             func(n int) int { return 100 - n },
@@ -81,6 +81,17 @@ func NewServer(addr string, api searchService, mcpHandler http.Handler) (*Server
 		addr:       addr,
 		mcpHandler: mcpHandler,
 	}, nil
+}
+
+// highlightHTML собирает разметку подсветки сам, вместо того чтобы доверять
+// строке из Manticore: она склеена из маркеров и текста задачи, а текст задачи
+// приходит от пользователей трекера. Экранируем всё целиком и только потом
+// возвращаем маркерам вид тегов — других тегов в выводе появиться не может.
+func highlightHTML(s string) template.HTML {
+	escaped := html.EscapeString(s)
+	escaped = strings.ReplaceAll(escaped, indexer.HighlightOpen, "<b>")
+	escaped = strings.ReplaceAll(escaped, indexer.HighlightClose, "</b>")
+	return template.HTML(escaped)
 }
 
 // progressPercent maps a Progress event to a 0-100 integer for the circular

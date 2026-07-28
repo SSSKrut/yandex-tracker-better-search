@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
+
 	syncer "github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
 )
 
@@ -144,12 +146,54 @@ func TestTemplateFuncs_TimeAgo(t *testing.T) {
 	}
 }
 
-func TestTemplateFuncs_SafeHTMLAndSub100(t *testing.T) {
-	// safeHTML нужен для подсветки <b> из HIGHLIGHT() — она не должна экранироваться.
-	if got := templateFunc(t, "{{safeHTML .}}", "<b>кнопка</b>"); got != "<b>кнопка</b>" {
-		t.Errorf("safeHTML = %q, want unescaped markup", got)
-	}
+func TestTemplateFuncs_Sub100(t *testing.T) {
 	if got := templateFunc(t, "{{sub100 .}}", 30); got != "70" {
 		t.Errorf("sub100(30) = %q, want \"70\"", got)
+	}
+}
+
+func TestHighlightHTML_MarkersBecomeTags(t *testing.T) {
+	in := indexer.HighlightOpen + "кнопка" + indexer.HighlightClose + " не работает"
+	if got := string(highlightHTML(in)); got != "<b>кнопка</b> не работает" {
+		t.Errorf("highlightHTML = %q, want the markers rendered as <b>", got)
+	}
+}
+
+func TestHighlightHTML_EscapesContent(t *testing.T) {
+	// Текст вокруг подсветки — это содержимое задачи из трекера. Ни один payload
+	// не должен доехать до браузера тегом; единственные теги в выводе — наши <b>.
+	payloads := []string{
+		`<script>alert(1)</script>`,
+		`<img src=x onerror=alert(1)>`,
+		`<svg/onload=alert(1)>`,
+		`" onmouseover="alert(1)`,
+		`<img src="x>" onerror=alert(1)>`,
+		`<<script>script>alert(1)<</script>/script>`,
+	}
+
+	for _, payload := range payloads {
+		got := string(highlightHTML(indexer.HighlightOpen + "гвоздь" + indexer.HighlightClose + " " + payload))
+
+		rest := strings.TrimPrefix(got, "<b>гвоздь</b> ")
+		if strings.ContainsAny(rest, "<>") {
+			t.Errorf("payload %q leaked markup: %q", payload, got)
+		}
+		for _, bad := range []string{"onerror", "onload", "onmouseover"} {
+			// Атрибут может остаться текстом, но только вне тега — проверяем именно это.
+			if strings.Contains(rest, bad) && strings.Contains(rest, "<") {
+				t.Errorf("payload %q produced an attribute inside a tag: %q", payload, got)
+			}
+		}
+	}
+}
+
+func TestHighlightHTML_ForgedMarkerCannotInjectTags(t *testing.T) {
+	// Даже если контент подделает маркер, худшее, что он получит, — жирный текст.
+	got := string(highlightHTML(`<b>жирный</b> и <script>alert(1)</script>`))
+	if strings.Contains(got, "<script") {
+		t.Errorf("content-supplied tags must not survive: %q", got)
+	}
+	if got != "&lt;b&gt;жирный&lt;/b&gt; и &lt;script&gt;alert(1)&lt;/script&gt;" {
+		t.Errorf("unexpected escaping: %q", got)
 	}
 }

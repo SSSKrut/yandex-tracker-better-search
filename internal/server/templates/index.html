@@ -607,16 +607,25 @@
         function updateActiveFiltersTags() {
             const container = document.getElementById('active-filters');
             const selects = document.querySelectorAll('.filter-select');
-            let tags = '';
 
+            // Подписи фильтров — это имена авторов, статусов и очередей из трекера,
+            // поэтому узлы собираются через textContent, а не склейкой разметки.
+            container.replaceChildren();
             selects.forEach(select => {
-                if (select.value) {
-                    const label = select.options[select.selectedIndex].text;
-                    tags += `<span class="active-filter-tag">${label} <span class="remove" onclick="clearFilter('${select.name}')">✕</span></span>`;
-                }
-            });
+                if (!select.value) return;
 
-            container.innerHTML = tags;
+                const tag = document.createElement('span');
+                tag.className = 'active-filter-tag';
+                tag.appendChild(document.createTextNode(select.options[select.selectedIndex].text + ' '));
+
+                const remove = document.createElement('span');
+                remove.className = 'remove';
+                remove.textContent = '✕';
+                remove.addEventListener('click', () => clearFilter(select.name));
+
+                tag.appendChild(remove);
+                container.appendChild(tag);
+            });
         }
 
         function clearFilter(name) {
