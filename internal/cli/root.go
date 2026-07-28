@@ -14,8 +14,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const defaultManticoreURL = "http://localhost:9308"
+
 // Build-time metadata. Overridden by goreleaser via -ldflags
-// (-X ytbs/cmd.version=... -X ytbs/cmd.commit=... -X ytbs/cmd.date=...).
+// (-X <module>/internal/cli.version=... и т.д.) — путь пакета зашит в
+// .goreleaser.yaml, при переезде пакета его надо обновлять вручную.
 var (
 	version = "dev"
 	commit  = "none"
@@ -41,21 +44,9 @@ Indexes issues and comments from Yandex Tracker into Manticore Search
 for fast full-text searching with rich filtering capabilities.`,
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// IAM token takes precedence when both are set — it's the more
-		// modern auth method recommended by Yandex Cloud.
-		if iam := os.Getenv("TRACKER_IAM_TOKEN"); iam != "" {
-			trackerToken = iam
-			trackerAuthScheme = tracker.AuthIAM
-		} else {
-			trackerToken = os.Getenv("TRACKER_OAUTH_TOKEN")
-			trackerAuthScheme = tracker.AuthOAuth
-		}
+		trackerToken, trackerAuthScheme = resolveTrackerAuth()
 		trackerOrgID = os.Getenv("TRACKER_CLOUD_ORG_ID")
-		manticoreURL = os.Getenv("MANTICORE_URL")
-
-		if manticoreURL == "" {
-			manticoreURL = "http://localhost:9308"
-		}
+		manticoreURL = resolveManticoreURL()
 
 		var cancel context.CancelFunc
 		ctx, cancel = signal.NotifyContext(
@@ -71,6 +62,23 @@ for fast full-text searching with rich filtering capabilities.`,
 
 		return nil
 	},
+}
+
+// resolveTrackerAuth reads the Tracker credentials from the environment. An IAM
+// token takes precedence when both are set — it's the more modern auth method
+// recommended by Yandex Cloud.
+func resolveTrackerAuth() (string, tracker.AuthScheme) {
+	if iam := os.Getenv("TRACKER_IAM_TOKEN"); iam != "" {
+		return iam, tracker.AuthIAM
+	}
+	return os.Getenv("TRACKER_OAUTH_TOKEN"), tracker.AuthOAuth
+}
+
+func resolveManticoreURL() string {
+	if url := os.Getenv("MANTICORE_URL"); url != "" {
+		return url
+	}
+	return defaultManticoreURL
 }
 
 // RequireTrackerEnv ensures a Tracker auth token and TRACKER_CLOUD_ORG_ID are

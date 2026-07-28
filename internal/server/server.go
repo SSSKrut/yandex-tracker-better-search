@@ -6,8 +6,10 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
 	syncer "github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
 )
@@ -15,9 +17,21 @@ import (
 //go:embed templates/*
 var templatesFS embed.FS
 
+// searchService - то, что ручки используют из searchapi.Service. Интерфейс
+// объявлен на стороне потребителя, чтобы их можно было тестировать без Manticore.
+type searchService interface {
+	Status() searchapi.FullStatus
+	Logs(limit int) []syncer.LogEntry
+	GetFilterOptions(ctx context.Context) (*searchapi.FilterOptions, error)
+	SearchRich(ctx context.Context, p searchapi.SearchParams) ([]searchapi.IndexerSearchResult, error)
+	Map(ctx context.Context, refresh bool) (*indexer.MapData, error)
+	TriggerSync(mode string) error
+	CancelSync() error
+}
+
 // Server - HTTP server
 type Server struct {
-	api        *searchapi.Service
+	api        searchService
 	templates  *template.Template
 	addr       string
 	mcpHandler http.Handler
@@ -25,7 +39,7 @@ type Server struct {
 
 // NewServer - creates a new Server instance. If mcpHandler is non-nil, it is
 // mounted at /mcp (and /mcp/) so MCP clients can connect over HTTP.
-func NewServer(addr string, api *searchapi.Service, mcpHandler http.Handler) (*Server, error) {
+func NewServer(addr string, api searchService, mcpHandler http.Handler) (*Server, error) {
 
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
@@ -97,19 +111,25 @@ func progressStageLabel(stage string) string {
 	}
 }
 
+// formatDuration - число со склонённой единицей: "1 минуту", "45 минут".
 func formatDuration(n float64, one, few, many string) string {
 	i := int(n)
-	if i%10 == 1 && i%100 != 11 {
-		return string(rune('0'+i%10)) + " " + one
-	}
-	if i%10 >= 2 && i%10 <= 4 && (i%100 < 10 || i%100 >= 20) {
-		return string(rune('0'+i%10)) + " " + few
-	}
-	return string(rune('0'+i%10)) + " " + many
+	return strconv.Itoa(i) + " " + pluralForm(i, one, few, many)
 }
 
-// Start - starts the HTTP server
-func (s *Server) Start(ctx context.Context) error {
+func pluralForm(i int, one, few, many string) string {
+	if i%10 == 1 && i%100 != 11 {
+		return one
+	}
+	if i%10 >= 2 && i%10 <= 4 && (i%100 < 10 || i%100 >= 20) {
+		return few
+	}
+	return many
+}
+
+// mux - описание маршрутов, отдельно от Start, чтобы их можно было проверить
+// без поднятия реального порта.
+func (s *Server) mux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Pages
@@ -129,9 +149,14 @@ func (s *Server) Start(ctx context.Context) error {
 		mux.Handle("/mcp/", s.mcpHandler)
 	}
 
+	return mux
+}
+
+// Start - starts the HTTP server
+func (s *Server) Start(ctx context.Context) error {
 	server := &http.Server{
 		Addr:    s.addr,
-		Handler: mux,
+		Handler: s.mux(),
 	}
 
 	// Graceful shutdown

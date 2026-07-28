@@ -61,6 +61,7 @@ Layers, in dependency order:
 ## Conventions worth knowing
 
 - The two Manticore tables (`issuesTableName`, `filesTableName`) and their infix-field lists are defined as constants at the top of `internal/indexer/indexer.go`. Schema changes need matching updates in `CreateTable`, `IndexIssues`/`IndexFiles`, and the search column lists in `searchIssuesWithFilters` / `searchFilesWithFilters`.
+- `internal/server` depends on the unexported `searchService` interface, not on `*searchapi.Service` directly, so handlers are testable with a fake. A handler that starts using a new `Service` method must add it to that interface.
 - IDs: when the upstream `id` is non-numeric, `hashString` derives a stable int64 (issues key off `Key`; files key off `IssueKey|FileName|FileURL`). Don't switch to a different hash without re-indexing.
 - Release version stamping (`.goreleaser.yaml`) injects `-X .../internal/cli.version`; a wrong path is silently ignored by the linker, so keep it in sync when the CLI package moves.
 - The CLI's `PersistentPreRunE` calls `log.Fatal` on missing env vars — adding new commands that don't need Tracker/Manticore would still trip this; gate with `cobra.Command.PersistentPreRunE` overrides if needed.
