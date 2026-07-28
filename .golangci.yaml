@@ -4,7 +4,7 @@ run:
   timeout: 5m
 
 issues:
-  # По умолчанию отчёт режется до 3 одинаковых находок — остальные молча теряются.
+  # By default the report is capped at 3 identical findings; the rest vanish.
   max-issues-per-linter: 0
   max-same-issues: 0
 

@@ -3,8 +3,6 @@ package main
 import (
 	"log"
 
-	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
-
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +24,7 @@ Performs a complete sync of:
 	PreRunE: func(cmd *cobra.Command, args []string) error { return RequireTrackerEnv() },
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := tracker.NewClientWithAuth(GetTrackerToken(), GetTrackerAuthScheme(), GetTrackerOrgID())
+		client := GetTrackerClient()
 
 		log.Println("Starting sync from Yandex Tracker...")
 		if len(syncQueues) > 0 {

@@ -6,9 +6,6 @@ package searchapi
 import (
 	"context"
 	"errors"
-	"os"
-	"strconv"
-	"strings"
 	stdsync "sync"
 	"time"
 
@@ -22,6 +19,8 @@ import (
 const DefaultTruncateChars = 2000
 
 // Service is the transport-agnostic API surface. It is safe for concurrent use.
+const defaultMapCacheTTL = 10 * time.Minute
+
 type Service struct {
 	indexer     *indexer.Indexer
 	syncManager *syncer.Manager
@@ -30,29 +29,30 @@ type Service struct {
 	mapCache    *indexer.MapData
 	mapCacheAt  time.Time
 	mapCacheTTL time.Duration
+	mapOptions  indexer.MapOptions
 }
 
-// NewService constructs a Service. mapCacheTTL of 0 falls back to MAP_CACHE_MINUTES
-// or a 10-minute default.
-func NewService(idx *indexer.Indexer, mgr *syncer.Manager) *Service {
+// Options - service settings. Zero fields fall back to defaults, so tests can
+// pass Options{}.
+type Options struct {
+	MapCacheTTL time.Duration
+	MapOptions  indexer.MapOptions
+}
+
+func NewService(idx *indexer.Indexer, mgr *syncer.Manager, opts Options) *Service {
+	if opts.MapCacheTTL <= 0 {
+		opts.MapCacheTTL = defaultMapCacheTTL
+	}
+	if opts.MapOptions == (indexer.MapOptions{}) {
+		opts.MapOptions = indexer.DefaultMapOptions()
+	}
+
 	return &Service{
 		indexer:     idx,
 		syncManager: mgr,
-		mapCacheTTL: mapCacheTTLFromEnv(),
+		mapCacheTTL: opts.MapCacheTTL,
+		mapOptions:  opts.MapOptions,
 	}
-}
-
-func mapCacheTTLFromEnv() time.Duration {
-	const defaultMinutes = 10
-	val := strings.TrimSpace(os.Getenv("MAP_CACHE_MINUTES"))
-	if val == "" {
-		return time.Duration(defaultMinutes) * time.Minute
-	}
-	parsed, err := strconv.Atoi(val)
-	if err != nil || parsed <= 0 {
-		return time.Duration(defaultMinutes) * time.Minute
-	}
-	return time.Duration(parsed) * time.Minute
 }
 
 // SearchParams aggregates the inputs accepted by Search. Empty fields mean "no
@@ -126,7 +126,7 @@ func (s *Service) Search(ctx context.Context, p SearchParams) ([]SearchHit, erro
 
 // AttachmentInfo is the lightweight attachment representation shipped inside
 // IssueDetail. URL points to the issue UI page (Tracker has no public per-file
-// URL — see tracker/attachments.go).
+// URL - see tracker/attachments.go).
 type AttachmentInfo struct {
 	FileName string `json:"file_name"`
 	URL      string `json:"url"`
@@ -137,7 +137,7 @@ type AttachmentInfo struct {
 }
 
 // IssueDetail is the full record returned by GetIssue. When Truncated is true,
-// Description and CommentsText were shortened — call GetIssue with full=true
+// Description and CommentsText were shortened - call GetIssue with full=true
 // to receive the untruncated payload.
 type IssueDetail struct {
 	Key          string           `json:"key"`
@@ -318,7 +318,7 @@ func (s *Service) MapOverview(ctx context.Context) ([]ClusterSummary, error) {
 			CentralKeys: c.CentralKeys,
 		})
 	}
-	// Largest clusters first — agents typically want a high-level view.
+	// Largest clusters first - agents typically want a high-level view.
 	for i := 0; i < len(out); i++ {
 		for j := i + 1; j < len(out); j++ {
 			if out[j].Size > out[i].Size {
@@ -354,7 +354,7 @@ func (s *Service) getOrBuildMap(ctx context.Context, refresh bool) (*indexer.Map
 		}
 	}
 
-	data, err := s.indexer.BuildSimilarityMap(ctx, indexer.MapOptionsFromEnv())
+	data, err := s.indexer.BuildSimilarityMap(ctx, s.mapOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (s *Service) CancelSync() error {
 }
 
 // FullStatus combines runtime sync status with persisted state and the map
-// cache timestamp — everything an MCP/HTTP status endpoint typically wants.
+// cache timestamp - everything an MCP/HTTP status endpoint typically wants.
 type FullStatus struct {
 	syncer.Status
 	LastFullSyncAt        time.Time `json:"last_full_sync_at"`

@@ -1,5 +1,5 @@
-// Обработчики навешиваются здесь, а не атрибутами onclick/onchange в разметке:
-// строгий CSP (script-src 'self') инлайновый JS не выполняет.
+// Handlers are attached here rather than as onclick/onchange attributes:
+// a strict CSP (script-src 'self') will not run inline JS.
 document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('.filters-header');
     if (header) {
@@ -34,8 +34,8 @@ function updateActiveFiltersTags() {
     const container = document.getElementById('active-filters');
     const selects = document.querySelectorAll('.filter-select');
 
-    // Подписи фильтров — это имена авторов, статусов и очередей из трекера,
-    // поэтому узлы собираются через textContent, а не склейкой разметки.
+    // Filter labels are author, status and queue names from the tracker, so
+    // build nodes with textContent instead of concatenating markup.
     container.replaceChildren();
     selects.forEach(select => {
         if (!select.value) return;

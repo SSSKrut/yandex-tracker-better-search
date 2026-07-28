@@ -2,15 +2,12 @@ package main
 
 import (
 	"log"
-	"os"
 	"strings"
 	"time"
 
 	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/internal/mcp"
-	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/server"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
-	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	"github.com/spf13/cobra"
 )
@@ -35,23 +32,22 @@ Provides web interface for:
 	PreRunE: func(cmd *cobra.Command, args []string) error { return RequireTrackerEnv() },
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := tracker.NewClientWithAuth(GetTrackerToken(), GetTrackerAuthScheme(), GetTrackerOrgID())
+		client := GetTrackerClient()
 
-		syncMgr := sync.NewManager(
-			client,
-			GetIndexer(),
-			nil, // queues (nil = all)
-			5,   // workers
-			serveInterval,
-			serveFullInterval,
-		)
+		syncMgr := sync.NewManager(client, GetIndexer(), sync.Options{
+			Workers:             5,
+			IncrementalInterval: serveInterval,
+			FullInterval:        serveFullInterval,
+			Overlap:             GetConfig().SyncOverlap,
+			StatePath:           GetConfig().SyncStatePath,
+		})
 
 		// Background sync at startup
 		go syncMgr.Start(GetContext())
 
-		api := searchapi.NewService(GetIndexer(), syncMgr)
+		api := newSearchService(syncMgr)
 
-		mcpToken := os.Getenv("MCP_AUTH_TOKEN")
+		mcpToken := GetConfig().MCPAuthToken
 		mcpHandler := ytbsmcp.NewHTTPHandler(api, mcpToken)
 		if mcpToken == "" && !isLoopback(serveAddr) {
 			log.Printf("warning: MCP endpoint /mcp is unauthenticated; set MCP_AUTH_TOKEN to require Bearer auth")

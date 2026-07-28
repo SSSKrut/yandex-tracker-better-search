@@ -5,9 +5,7 @@ import (
 	"os"
 
 	ytbsmcp "github.com/SSSKrut/yandex-tracker-better-search/internal/mcp"
-	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
-	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
@@ -34,10 +32,14 @@ Configure your MCP client (e.g. Claude Code) to launch:
 		// the client asks. The manager is constructed lazily-friendly: if
 		// TRACKER_* are missing, the underlying tracker.Client will fail at
 		// fetch time, not at construction. Read-only MCP usage never hits it.
-		client := tracker.NewClientWithAuth(GetTrackerToken(), GetTrackerAuthScheme(), GetTrackerOrgID())
-		mgr := sync.NewManager(client, GetIndexer(), nil, 5, 0, 0)
+		client := GetTrackerClient()
+		mgr := sync.NewManager(client, GetIndexer(), sync.Options{
+			Workers:   5,
+			Overlap:   GetConfig().SyncOverlap,
+			StatePath: GetConfig().SyncStatePath,
+		})
 
-		api := searchapi.NewService(GetIndexer(), mgr)
+		api := newSearchService(mgr)
 		srv := ytbsmcp.NewServer(api)
 
 		log.SetOutput(os.Stderr) // never write to stdout — it's the MCP transport

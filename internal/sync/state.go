@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -18,12 +17,9 @@ type StateStore struct {
 	path string
 }
 
-func DefaultStatePath() string {
-	if val := strings.TrimSpace(os.Getenv("SYNC_STATE_PATH")); val != "" {
-		return val
-	}
-	return filepath.Join("backups", "sync_state.json")
-}
+// DefaultStatePath - the fallback path; SYNC_STATE_PATH overrides it via the
+// config loaded in cmd/ytbs.
+const DefaultStatePath = "backups/sync_state.json"
 
 func NewStateStore(path string) *StateStore {
 	return &StateStore{path: path}

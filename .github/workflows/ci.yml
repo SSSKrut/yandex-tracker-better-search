@@ -45,8 +45,8 @@ jobs:
 
       - name: Test
         env:
-          # Включает TestLive_*: поисковый SQL проверяется настоящим движком,
-          # синтаксические ошибки Manticore на строковых тестах не видны.
+          # Enables TestLive_*: the search SQL is checked by the real engine.
+          # Manticore syntax errors are invisible to string-level tests.
           MANTICORE_TEST_URL: http://127.0.0.1:9308
         run: go test -race ./...
 

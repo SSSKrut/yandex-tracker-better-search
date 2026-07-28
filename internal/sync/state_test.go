@@ -37,9 +37,9 @@ func TestStateStore_SaveLoad(t *testing.T) {
 	}
 }
 
-func TestDefaultStatePath_EnvOverride(t *testing.T) {
-	t.Setenv("SYNC_STATE_PATH", "/tmp/custom_state.json")
-	if got := DefaultStatePath(); got != "/tmp/custom_state.json" {
-		t.Fatalf("expected env override, got %s", got)
+func TestDefaultStatePath(t *testing.T) {
+	// Overridden through the config now, not by reading the environment here.
+	if DefaultStatePath == "" {
+		t.Fatal("DefaultStatePath must not be empty")
 	}
 }

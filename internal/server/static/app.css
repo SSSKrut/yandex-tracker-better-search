@@ -1,5 +1,5 @@
-/* Классы вместо инлайновых style= в status.html: под строгим CSP
-   атрибут style запрещён, а эти правила были статическими. */
+/* Classes replacing the inline style= in status.html: a strict CSP forbids the
+   style attribute, and these rules were static anyway. */
 .sync-time {
     margin-left: 8px;
     color: #999;

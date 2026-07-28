@@ -90,7 +90,7 @@ func TestSummarizeClusters_TopKeywordsAndCentralKeys(t *testing.T) {
 		t.Fatalf("unexpected matrix shape: rows=%d cols=%d", rows, cols)
 	}
 
-	// A-cluster around (0,0), B-cluster around (10,10) — straightforward 2D
+	// A-cluster around (0,0), B-cluster around (10,10) - straightforward 2D
 	// layout to make centroid math obvious.
 	coords := [][2]float64{
 		{0, 0}, {0.1, 0.1},

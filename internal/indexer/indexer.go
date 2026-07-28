@@ -28,14 +28,14 @@ const (
 	issuesInfixFields  = "summary,description,comments_text"
 	filesInfixFields   = "file_name,content_text,metadata_text"
 
-	// fullTextWildcardChars - джокеры Manticore: экранирование их не обезвреживает.
+	// fullTextWildcardChars - Manticore wildcards; escaping does not defuse them.
 	fullTextWildcardChars = `\?%`
 
-	// HighlightOpen/HighlightClose - границы совпадения в HIGHLIGHT(). Это не HTML:
-	// подсветка приходит вперемешку с текстом задачи, который в браузер попадать
-	// сырым не должен. Слой отображения экранирует строку целиком и только потом
-	// заменяет маркеры на теги. Управляющие символы взяты намеренно — escapeSQL
-	// вырезает их из индексируемого текста, так что подделать маркер невозможно.
+	// HighlightOpen/HighlightClose - match boundaries for HIGHLIGHT(). Not HTML:
+	// the result mixes markers with issue text, which must never reach a browser
+	// raw. The view layer escapes the whole string, then swaps markers for tags.
+	// Control characters on purpose - escapeSQL strips them while indexing, so
+	// content cannot forge a marker.
 	HighlightOpen  = "\x02"
 	HighlightClose = "\x03"
 )
@@ -310,7 +310,7 @@ type SearchResult struct {
 	ParentIssueURL string    `json:"parent_issue_url"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
-	// Exact - попадание по ссылке или ключу задачи, такие результаты идут первыми.
+	// Exact - matched by link or issue key; these sort first.
 	Exact bool `json:"-"`
 }
 
@@ -395,8 +395,8 @@ func escapeSQL(s string) string {
 
 // escapeQuery - escapes special characters in the search query.
 //
-// Слэш удваивается намеренно: один уровень съест парсер строкового литерала SQL,
-// и до полнотекстового парсера доедет голый оператор ("P08: syntax error").
+// Backslashes are doubled on purpose: the SQL string parser eats one level, and
+// a bare operator reaching the full-text parser is a "P08: syntax error".
 func escapeQuery(query string, keepWildcards bool) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -409,7 +409,7 @@ func escapeQuery(query string, keepWildcards bool) string {
 	for _, r := range query {
 		switch {
 		case r == '\'':
-			// Оператором полнотекста не является — экранируем только для SQL.
+			// Not a full-text operator, so escape it for SQL only.
 			b.WriteString(`\'`)
 		case r == '*':
 			if keepWildcards {
@@ -418,7 +418,7 @@ func escapeQuery(query string, keepWildcards bool) string {
 				b.WriteByte(' ')
 			}
 		case strings.ContainsRune(fullTextWildcardChars, r):
-			// Экранированный джокер остаётся в токене и не находится никогда.
+			// An escaped wildcard stays inside the token and never matches.
 			b.WriteByte(' ')
 		case isFullTextPunct(r):
 			b.WriteString(`\\`)
@@ -433,8 +433,8 @@ func escapeQuery(query string, keepWildcards bool) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
-// isFullTextPunct - ASCII-пунктуация для полнотекстового парсера. Экранированный
-// символ он трактует как разделитель токенов, так что экранировать с запасом безопасно.
+// isFullTextPunct - ASCII punctuation for the full-text parser. It treats an
+// escaped character as a token separator, so over-escaping is safe.
 func isFullTextPunct(r rune) bool {
 	if r > unicode.MaxASCII || !unicode.IsPrint(r) {
 		return false
@@ -805,8 +805,8 @@ func buildQueryCondition(rawQuery string) string {
 			continue
 		}
 		seen[escaped] = struct{}{}
-		// Скобки обязательны: `|` связывает сильнее неявного AND, и без группировки
-		// `a b | a* b*` разбирается как `a (b | a*) b*`.
+		// Parentheses are required: `|` binds tighter than the implicit AND, so
+		// `a b | a* b*` parses as `a (b | a*) b*`.
 		escapedVariants = append(escapedVariants, "("+escaped+")")
 	}
 
@@ -826,8 +826,8 @@ func hasSearchableContent(s string) bool {
 	return false
 }
 
-// buildAttributeCondition - условие для поиска по ссылке или ключу задачи:
-// url и issue_key лежат в атрибутах, а не в полнотекстовых полях, и MATCH их не видит.
+// buildAttributeCondition - matches a link or an issue key. url and issue_key are
+// string attributes, not full-text fields, so MATCH cannot see them.
 func buildAttributeCondition(rawQuery, urlField string) string {
 	query := strings.TrimSpace(rawQuery)
 	if query == "" {
@@ -841,7 +841,7 @@ func buildAttributeCondition(rawQuery, urlField string) string {
 	}
 
 	if target := urlRegexTarget(query); target != "" {
-		// Якорь в конце нужен, чтобы ссылка на NOVA-42 не притащила ещё и NOVA-429.
+		// Anchored at the end so a link to NOVA-42 doesn't also match NOVA-429.
 		pattern := escapeSQL(regexp.QuoteMeta(target) + "$")
 		conditions = append(conditions, fmt.Sprintf("REGEX(%s, '%s')", urlField, pattern))
 	}
@@ -856,8 +856,8 @@ func buildAttributeCondition(rawQuery, urlField string) string {
 	}
 }
 
-// extractIssueKey - ключ задачи из запроса ("NOVA-42") или из сегмента ссылки,
-// в том числе ссылки без схемы ("tracker.yandex.ru/NOVA-42").
+// extractIssueKey - the issue key from the query ("NOVA-42") or from a link
+// segment, including a link with no scheme ("tracker.yandex.ru/NOVA-42").
 func extractIssueKey(query string) string {
 	query = strings.TrimSpace(query)
 	if query == "" || len(strings.Fields(query)) != 1 {
@@ -880,7 +880,7 @@ func extractIssueKey(query string) string {
 	return ""
 }
 
-// urlRegexTarget - ссылка без фрагмента и завершающего слэша: в сохранённом url их нет.
+// urlRegexTarget - the link without fragment or trailing slash; a stored url has neither.
 func urlRegexTarget(query string) string {
 	query = strings.TrimSpace(query)
 	if !looksLikeURL(query) || len(strings.Fields(query)) != 1 {

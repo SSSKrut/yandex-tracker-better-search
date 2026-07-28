@@ -23,7 +23,7 @@ const (
 )
 
 // NewServer constructs an MCP server with all ytbs tools and resources
-// pre-registered. The server is not started — callers run it via
+// pre-registered. The server is not started - callers run it via
 // server.Run(ctx, transport).
 func NewServer(api *searchapi.Service) *sdk.Server {
 	srv := sdk.NewServer(&sdk.Implementation{

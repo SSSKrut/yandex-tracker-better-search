@@ -18,12 +18,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Ручки логируют ошибки по пути degraded-веток — в выводе тестов это шум.
+	// Handlers log on their degraded paths, which is noise in test output.
 	log.SetOutput(io.Discard)
 	os.Exit(m.Run())
 }
 
-// fakeAPI - реализация searchService, полностью управляемая тестом.
+// fakeAPI - a searchService the test drives entirely.
 type fakeAPI struct {
 	status        searchapi.FullStatus
 	logs          []syncer.LogEntry
@@ -125,7 +125,7 @@ func TestHandleIndex_RendersWithFilters(t *testing.T) {
 }
 
 func TestHandleIndex_SurvivesFilterOptionsError(t *testing.T) {
-	// Страница не должна падать, если фильтры не загрузились.
+	// The page must survive filters failing to load.
 	api := &fakeAPI{filterErr: fmt.Errorf("manticore is down")}
 	srv := newTestServer(t, api)
 
@@ -152,7 +152,7 @@ func TestHandleSearch_EmptyQueryDoesNotSearch(t *testing.T) {
 }
 
 func TestHandleSearch_FiltersAloneTriggerSearch(t *testing.T) {
-	// Пустой запрос с выбранным фильтром — это всё ещё поиск.
+	// An empty query with a filter set is still a search.
 	api := &fakeAPI{}
 	srv := newTestServer(t, api)
 
@@ -293,7 +293,7 @@ func TestHandleMapData_Error(t *testing.T) {
 }
 
 func TestStart_RoutesAndMCPMount(t *testing.T) {
-	// Проверяем, что маршруты и монтирование MCP описаны так, как ожидает UI.
+	// The routes and the MCP mount must match what the UI expects.
 	api := &fakeAPI{}
 	mcpHit := false
 	mcp := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -342,15 +342,15 @@ func TestStart_NoMCPHandler(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// Без MCP-обработчика /mcp попадает в catch-all "/" и получает 404.
+	// With no MCP handler, /mcp falls into the catch-all "/" and 404s.
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /mcp = %d, want 404 when MCP is disabled", resp.StatusCode)
 	}
 }
 
 func TestHandleSearch_HighlightIsEscapedEndToEnd(t *testing.T) {
-	// Через настоящий шаблон: подсветка из Manticore приходит маркерами вперемешку
-	// с текстом задачи, и наружу должны выйти только наши <b>.
+	// Through the real template: Manticore returns markers mixed with issue
+	// text, and only our <b> may come out.
 	api := &fakeAPI{results: []searchapi.IndexerSearchResult{{
 		Kind: "issue", Key: "NOVA-1", Summary: "тест",
 		Highlight: indexer.HighlightOpen + "кнопка" + indexer.HighlightClose +
@@ -365,7 +365,7 @@ func TestHandleSearch_HighlightIsEscapedEndToEnd(t *testing.T) {
 	if !strings.Contains(body, want) {
 		t.Errorf("highlight block rendered unsafely.\nwant to contain: %s", want)
 	}
-	// Ни одного тега из payload — <b> закрывается до начала пользовательского текста.
+	// No tag from the payload: <b> closes before the user text begins.
 	for _, bad := range []string{"<script", "<img"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("payload leaked a tag into the page: %q", bad)

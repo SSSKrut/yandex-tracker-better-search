@@ -153,8 +153,8 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "status.html", s.api.Status().Status)
 }
 
-// render - выполняет шаблон. Ответ к этому моменту уже частично записан,
-// поэтому ошибку остаётся только залогировать.
+// render - executes a template. The response is already partly written by
+// then, so a failure can only be logged.
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("Error rendering %s: %v", name, err)

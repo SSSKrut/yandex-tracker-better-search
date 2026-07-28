@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -84,23 +82,42 @@ type LogEntry struct {
 }
 
 // NewManager - creates sync manager instance
-func NewManager(tracker *tracker.Client, indexer *indexer.Indexer, queues []string, workers int, incrementalInterval, fullInterval time.Duration) *Manager {
-	if incrementalInterval <= 0 {
-		incrementalInterval = 15 * time.Minute
+const defaultOverlap = 2 * time.Minute
+
+// Options - manager settings, a struct because eight positional parameters
+// would be unreadable.
+type Options struct {
+	Queues              []string
+	Workers             int
+	IncrementalInterval time.Duration
+	FullInterval        time.Duration
+	Overlap             time.Duration
+	StatePath           string
+}
+
+func NewManager(tracker *tracker.Client, indexer *indexer.Indexer, opts Options) *Manager {
+	if opts.IncrementalInterval <= 0 {
+		opts.IncrementalInterval = 15 * time.Minute
 	}
-	if fullInterval <= 0 {
-		fullInterval = 24 * time.Hour
+	if opts.FullInterval <= 0 {
+		opts.FullInterval = 24 * time.Hour
+	}
+	if opts.Overlap <= 0 {
+		opts.Overlap = defaultOverlap
+	}
+	if opts.StatePath == "" {
+		opts.StatePath = DefaultStatePath
 	}
 
 	return &Manager{
 		tracker:             tracker,
 		indexer:             indexer,
-		queues:              queues,
-		workers:             workers,
-		incrementalInterval: incrementalInterval,
-		fullInterval:        fullInterval,
-		overlap:             readEnvDuration("SYNC_OVERLAP", 2*time.Minute),
-		stateStore:          NewStateStore(DefaultStatePath()),
+		queues:              opts.Queues,
+		workers:             opts.Workers,
+		incrementalInterval: opts.IncrementalInterval,
+		fullInterval:        opts.FullInterval,
+		overlap:             opts.Overlap,
+		stateStore:          NewStateStore(opts.StatePath),
 		logs:                make([]LogEntry, 0, 100),
 		requestChannel:      make(chan syncRequest, 1),
 	}
@@ -452,16 +469,4 @@ func (m *Manager) updateState(update func(state *SyncState)) {
 	if err := m.stateStore.Save(state); err != nil {
 		m.addLog("error", fmt.Sprintf("State save failed: %v", err))
 	}
-}
-
-func readEnvDuration(name string, fallback time.Duration) time.Duration {
-	val := strings.TrimSpace(os.Getenv(name))
-	if val == "" {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(val)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
 }

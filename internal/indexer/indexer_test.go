@@ -30,7 +30,7 @@ func TestEscapeQuery_EscapesOperators(t *testing.T) {
 	in := `url:https://a.b/c&(x)-y`
 	got := escapeQuery(in, false)
 
-	// Один уровень слэшей съест парсер строкового литерала SQL.
+	// The SQL string parser eats one level of backslashes.
 	mustContain := []string{`\\:`, `\\/`, `\\&`, `\\(`, `\\)`, `\\-`}
 	for _, token := range mustContain {
 		if !strings.Contains(got, token) {
@@ -140,8 +140,8 @@ func TestBuildQueryCondition_SingleMatchClause(t *testing.T) {
 }
 
 func TestBuildQueryCondition_GroupsVariants(t *testing.T) {
-	// `|` связывает сильнее неявного AND: без скобок `a b | a* b*` разбирается
-	// как `a (b | a*) b*` и не находит ничего.
+	// `|` binds tighter than the implicit AND: without parentheses
+	// `a b | a* b*` parses as `a (b | a*) b*` and matches nothing.
 	cond := buildQueryCondition("login error")
 
 	if !strings.Contains(cond, "(login error) | (login* error*)") {
@@ -155,8 +155,8 @@ func TestBuildQueryCondition_GroupsVariants(t *testing.T) {
 }
 
 func TestBuildQueryCondition_NoUnsupportedSQL(t *testing.T) {
-	// Manticore не умеет ни LIKE по строковым атрибутам, ни OR между MATCH()
-	// и фильтром по атрибутам — обе конструкции падают с "P01: syntax error".
+	// Manticore supports neither LIKE on string attributes nor OR between
+	// MATCH() and an attribute filter; both are a "P01: syntax error".
 	cond := buildQueryCondition("https://tracker.yandex.ru/PRJ-123")
 
 	if strings.Contains(cond, "LIKE") {
@@ -201,7 +201,7 @@ func TestBuildWhereClauses_URLWithFilters(t *testing.T) {
 		t.Fatalf("expected issue key lookup, got %q", clauses[1].sql)
 	}
 
-	// Без фильтров во втором варианте ссылка протащит задачу мимо выбранной очереди.
+	// Without filters on the second clause a link sneaks an issue past the queue.
 	for _, clause := range clauses {
 		for _, check := range []string{"queue = 'DEV'", "status_name = 'Open'", "priority = 'high'", " AND "} {
 			if !strings.Contains(clause.sql, check) {
@@ -239,7 +239,7 @@ func TestBuildWhereClauses_EmptyQueryKeepsFilters(t *testing.T) {
 }
 
 func TestBuildWhereClauses_WildcardOnlyQueryMatchesNothing(t *testing.T) {
-	// Вариант с одними фильтрами отдал бы весь индекс.
+	// A filters-only clause would return the whole index.
 	for _, query := range []string{"%", "???", `\`} {
 		if clauses := buildWhereClauses(query, SearchFilters{Queue: "DEV"}, "url"); len(clauses) != 0 {
 			t.Fatalf("query %q must not produce a filter-only clause, got %+v", query, clauses)
@@ -274,7 +274,7 @@ func TestBuildAttributeCondition_EscapesRegex(t *testing.T) {
 	if !strings.Contains(cond, "REGEX(url,") {
 		t.Fatalf("expected regex condition, got %q", cond)
 	}
-	// Точка не должна остаться метасимволом регулярки.
+	// The dot must not stay a regex metacharacter.
 	if !strings.Contains(cond, `\\.`) {
 		t.Fatalf("expected escaped dot in regex pattern, got %q", cond)
 	}
@@ -284,7 +284,7 @@ func TestBuildAttributeCondition_EscapesRegex(t *testing.T) {
 }
 
 func TestBuildAttributeCondition_AnchorsURL(t *testing.T) {
-	// Без якоря ссылка на NOVA-42 находит ещё и NOVA-42{0..9}.
+	// Unanchored, a link to NOVA-42 also matches NOVA-42{0..9}.
 	cond := buildAttributeCondition("https://tracker.yandex.ru/NOVA-42", "url")
 
 	pattern := "https://tracker\\\\.yandex\\\\.ru/NOVA-42$"
@@ -306,8 +306,8 @@ func TestBuildAttributeCondition_MultiWordQueryIsNotAURL(t *testing.T) {
 	}
 }
 
-// TestBuildWhereClauses_SyntacticallySane - защита от "P01: syntax error": скобки
-// вне литералов должны быть сбалансированы, а кавычки — закрыты.
+// TestBuildWhereClauses_SyntacticallySane - guards against "P01: syntax error":
+// parentheses outside literals must balance and quotes must close.
 func TestBuildWhereClauses_SyntacticallySane(t *testing.T) {
 	queries := []string{
 		"https://",

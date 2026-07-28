@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestLive_SearchAcceptedByManticore - "P01/P08: syntax error" видны только движку,
-// тесты на строках их не ловят. Запускается при заданном MANTICORE_TEST_URL:
+// TestLive_SearchAcceptedByManticore - only the engine sees "P01/P08: syntax
+// error"; string tests miss it. Runs when MANTICORE_TEST_URL is set:
 //
 //	MANTICORE_TEST_URL=http://localhost:9308 go test ./internal/indexer -run TestLive
 func TestLive_SearchAcceptedByManticore(t *testing.T) {
@@ -19,8 +19,8 @@ func TestLive_SearchAcceptedByManticore(t *testing.T) {
 	idx := NewIndexer(manticoreURL)
 	ctx := context.Background()
 
-	// На пустом инстансе (CI) таблиц нет и любой SELECT падает на "unknown table".
-	// CREATE TABLE IF NOT EXISTS, так что на живой базе это no-op.
+	// A fresh instance (CI) has no tables and every SELECT fails with
+	// "unknown table". IF NOT EXISTS, so this is a no-op on a live index.
 	if err := idx.CreateTable(ctx); err != nil {
 		t.Fatalf("create tables: %v", err)
 	}

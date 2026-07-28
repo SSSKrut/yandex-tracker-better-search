@@ -22,8 +22,8 @@ func TestStripHTML(t *testing.T) {
 }
 
 func TestStripHTML_DoesNotManufactureMarkup(t *testing.T) {
-	// Раньше сущности декодировались ПОСЛЕ вырезания тегов, поэтому чистка
-	// сама создавала разметку: экранированный в трекере тег оживал в индексе.
+	// Entities used to be decoded AFTER tags were stripped, so the cleanup
+	// itself produced markup: a tag escaped in the tracker came back to life.
 	cases := []string{
 		"&lt;script&gt;alert(1)&lt;/script&gt;",
 		"&amp;lt;img src=x onerror=alert(1)&amp;gt;",
@@ -41,7 +41,7 @@ func TestStripHTML_DoesNotManufactureMarkup(t *testing.T) {
 }
 
 func TestConvertToIndexed_SanitizesSummary(t *testing.T) {
-	// Summary раньше уезжал в индекс сырым и оттуда попадал в /api/map.
+	// Summary used to reach the index raw and flow on into /api/map.
 	issue := Issue{
 		Key:     "PRJ-1",
 		Summary: "Кнопка <img src=x onerror=alert(1)> не работает",

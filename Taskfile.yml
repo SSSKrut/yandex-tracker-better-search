@@ -85,7 +85,7 @@ tasks:
       - docker compose logs -f {{.CLI_ARGS}}
 
   ci:
-    desc: Прогнать всё, что гоняет CI (нужен docker — тесты идут с живым Manticore)
+    desc: Прогнать всё, что гоняет CI (нужен docker - тесты идут с живым Manticore)
     deps: [manticore]
     env:
       MANTICORE_TEST_URL: '{{.MANTICORE}}'

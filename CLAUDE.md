@@ -42,13 +42,15 @@ Manticore data lives in the `manticore_data` Docker volume; backup/restore recip
 - `TRACKER_CLOUD_ORG_ID` — Cloud Organization ID, sent as `X-Cloud-Org-ID` (fatal if missing)
 - `MANTICORE_URL` — Manticore HTTP API endpoint (default `http://localhost:9308`)
 
-Optional tuning: `ATTACHMENT_TEXT_MAX_BYTES`, `SYNC_OVERLAP`, `SYNC_STATE_PATH`, `MAP_CACHE_MINUTES`, and `MAP_*` knobs read in `indexer.MapOptionsFromEnv`.
+Optional tuning: `ATTACHMENT_TEXT_MAX_BYTES`, `SYNC_OVERLAP`, `SYNC_STATE_PATH`, `MAP_CACHE_TTL`, and the `MAP_*` knobs.
+
+All of them are declared in `internal/config` (cleanenv struct tags) and read **once** in `cmd/ytbs`; nothing under `internal/` calls `os.Getenv`. Durations use Go syntax (`30s`, `10m`, `1h30m`) and an unparseable value fails startup instead of silently falling back. `ytbs --help` prints the variable list generated from those tags.
 
 ## Architecture
 
 Layout: the whole CLI layer — `main`, the Cobra commands, flag wiring and console output — lives in `cmd/ytbs/` as `package main`. Everything else (the guts) sits under `internal/`. The repo root carries no Go code.
 
-Entry point is `cmd/ytbs/root.go`, whose `PersistentPreRunE` constructs the singleton `*indexer.Indexer` and a SIGINT/SIGTERM-cancellable `ctx` shared via `GetContext()` / `GetIndexer()` / `GetTrackerToken()` / `GetTrackerOrgID()` — subcommands (`serve`, `sync`, `search`, `mcp`) read from these getters rather than rebuilding state.
+Entry point is `cmd/ytbs/root.go`, whose `PersistentPreRunE` constructs the singleton `*indexer.Indexer` and a SIGINT/SIGTERM-cancellable `ctx` shared via `GetContext()` / `GetIndexer()` / `GetConfig()` / `GetTrackerClient()` — subcommands (`serve`, `sync`, `search`, `mcp`) read from these getters rather than rebuilding state.
 
 Layers, in dependency order:
 
@@ -56,7 +58,7 @@ Layers, in dependency order:
 2. **`internal/indexer/`** — Manticore client wrapping the official Go SDK. `CreateTable` provisions two tables (`issues`, `files`) with `morphology='stem_en, stem_ru'`, `html_strip='1'`, and prefix/infix indexes on the searchable fields. Indexing uses `REPLACE INTO` with `escapeSQL` (drops NULs/control chars, escapes quotes/backslashes). Search runs a query expansion in `buildMatchVariants` — original token, prefix wildcard variant (`tok*`), infix variant (`*tok*`) — each variant parenthesised before being joined with `|`, because Manticore binds `|` tighter than the implicit AND. A link or issue key produces a second, attribute-only WHERE (`issue_key = ...` / `REGEX(url, ...)`) that runs as a separate query and is merged in Go: Manticore supports neither `LIKE` on string attributes nor `OR` between `MATCH()` and an attribute filter. Results from `issues` and `files` are merged and sorted by `updated_at DESC` (exact link/key hits first), capped at `limit`.
 3. **`internal/indexer/map.go`** — separate "similarity map" pipeline (TF-IDF over docs → SVD via `gonum/mat` → 2D coords → k-means clustering → top-N cosine neighbors). Pure in-memory, no external services.
 4. **`internal/sync/`** — periodic sync orchestrator. `Manager.Start` runs incremental + full tickers; on first boot (no `LastFullSyncAt`) it kicks off a full sync, otherwise an incremental. Manual triggers go through `requestChannel` (buffered size 1). Watermark tracked in `SyncState.LastUpdatedAt`, persisted to JSON via `StateStore`; incrementals query `since = LastUpdatedAt - SYNC_OVERLAP` to absorb clock skew.
-5. **`internal/server/`** — `net/http` mux with htmx-driven HTML templates embedded via `//go:embed templates/*`. Pages: `/`, `/logs`, `/map`. APIs: `/api/search`, `/api/status`, `/api/sync` (POST=trigger, DELETE=cancel), `/api/map` (cached for `MAP_CACHE_MINUTES`, `?refresh=1` to bust). HTMX triggers are signalled via `HX-Trigger` headers (`sync-started`, `sync-cancelled`, `sync-error`).
+5. **`internal/server/`** — `net/http` mux with htmx-driven HTML templates embedded via `//go:embed templates/*`. Pages: `/`, `/logs`, `/map`. APIs: `/api/search`, `/api/status`, `/api/sync` (POST=trigger, DELETE=cancel), `/api/map` (cached for `MAP_CACHE_TTL`, `?refresh=1` to bust). HTMX triggers are signalled via `HX-Trigger` headers (`sync-started`, `sync-cancelled`, `sync-error`).
 
 ## Conventions worth knowing
 
@@ -67,5 +69,5 @@ Layers, in dependency order:
 - IDs: when the upstream `id` is non-numeric, `hashString` derives a stable int64 (issues key off `Key`; files key off `IssueKey|FileName|FileURL`). Don't switch to a different hash without re-indexing.
 - Release version stamping (`.goreleaser.yaml`) and `task build` inject `-X main.version` / `.commit` / `.date`. A wrong symbol path is silently ignored by the linker — the build succeeds with an empty version — so these stay valid only while the metadata vars live in `package main`.
 - The CLI's `PersistentPreRunE` calls `log.Fatal` on missing env vars — adding new commands that don't need Tracker/Manticore would still trip this; gate with `cobra.Command.PersistentPreRunE` overrides if needed.
-- Russian and English comments coexist in source; UI strings (`templates/*.html`, time-ago formatting in `internal/server/server.go`) are Russian.
+- Comments are English; UI strings are Russian (`templates/*.html`, the labels passed to `formatDuration`/`progressStageLabel` in `internal/server/server.go`, the map labels in `internal/server/static/map.js`).
 - `.env` in the repo root may contain real credentials in some checkouts — never commit modifications to it; use `.env.example` for documentation.

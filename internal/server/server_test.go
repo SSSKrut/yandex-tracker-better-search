@@ -15,8 +15,8 @@ import (
 )
 
 func TestFormatDuration(t *testing.T) {
-	// Раньше число печаталось как string(rune('0'+i%10)), то есть от него
-	// оставалась последняя цифра: "45 минут назад" превращалось в "5 минут назад".
+	// The number used to be printed as string(rune('0'+i%10)), leaving only the
+	// last digit: "45 минут назад" came out as "5 минут назад".
 	tests := []struct {
 		n    float64
 		want string
@@ -99,8 +99,8 @@ func TestProgressStageLabel(t *testing.T) {
 	}
 }
 
-// templateFunc - вызывает функцию из FuncMap шаблонов через сам шаблон,
-// потому что напрямую они не экспортируются.
+// templateFunc - calls a FuncMap function through a template, since they are
+// not exported.
 func templateFunc(t *testing.T, expr string, data any) string {
 	t.Helper()
 
@@ -164,8 +164,8 @@ func TestHighlightHTML_MarkersBecomeTags(t *testing.T) {
 }
 
 func TestHighlightHTML_EscapesContent(t *testing.T) {
-	// Текст вокруг подсветки — это содержимое задачи из трекера. Ни один payload
-	// не должен доехать до браузера тегом; единственные теги в выводе — наши <b>.
+	// The text around a match is issue content from the tracker. No payload may
+	// reach the browser as a tag; the only tags in the output are our <b>.
 	payloads := []string{
 		`<script>alert(1)</script>`,
 		`<img src=x onerror=alert(1)>`,
@@ -183,7 +183,7 @@ func TestHighlightHTML_EscapesContent(t *testing.T) {
 			t.Errorf("payload %q leaked markup: %q", payload, got)
 		}
 		for _, bad := range []string{"onerror", "onload", "onmouseover"} {
-			// Атрибут может остаться текстом, но только вне тега — проверяем именно это.
+			// An attribute may survive as text, but only outside a tag.
 			if strings.Contains(rest, bad) && strings.Contains(rest, "<") {
 				t.Errorf("payload %q produced an attribute inside a tag: %q", payload, got)
 			}
@@ -192,7 +192,7 @@ func TestHighlightHTML_EscapesContent(t *testing.T) {
 }
 
 func TestHighlightHTML_ForgedMarkerCannotInjectTags(t *testing.T) {
-	// Даже если контент подделает маркер, худшее, что он получит, — жирный текст.
+	// Even if content forges a marker, the worst it gets is bold text.
 	got := string(highlightHTML(`<b>жирный</b> и <script>alert(1)</script>`))
 	if strings.Contains(got, "<script") {
 		t.Errorf("content-supplied tags must not survive: %q", got)
@@ -219,7 +219,7 @@ func TestSecurityHeaders(t *testing.T) {
 			t.Errorf("CSP %q is missing %q", csp, want)
 		}
 	}
-	// Инлайна в шаблонах не осталось, поэтому послаблений быть не должно.
+	// Nothing is inline any more, so there should be no relaxations.
 	for _, bad := range []string{"unsafe-inline", "unsafe-eval", "http://", "https://"} {
 		if strings.Contains(csp, bad) {
 			t.Errorf("CSP must not contain %q: %s", bad, csp)
@@ -273,8 +273,9 @@ func TestStaticAssetsAreServed(t *testing.T) {
 	}
 }
 
-// TestTemplatesReferenceExistingAssets ловит опечатку в пути и файл, забытый
-// при выносе инлайна: под строгим CSP такая страница молча останется без стилей.
+// TestTemplatesReferenceExistingAssets catches a typo in a path or a file
+// missed during extraction: under a strict CSP such a page silently loses its
+// styles.
 func TestTemplatesReferenceExistingAssets(t *testing.T) {
 	pages, err := templatesFS.ReadDir("templates")
 	if err != nil {
@@ -304,8 +305,8 @@ func TestTemplatesReferenceExistingAssets(t *testing.T) {
 }
 
 func TestTemplatesHaveNoInlineCode(t *testing.T) {
-	// Инлайновые скрипты, стили и обработчики строгий CSP не выполнит —
-	// страница сломается молча, поэтому запрещаем их на уровне теста.
+	// A strict CSP won't run inline scripts, styles or handlers, and the page
+	// breaks without a word, so ban them here.
 	pages, err := templatesFS.ReadDir("templates")
 	if err != nil {
 		t.Fatalf("read templates: %v", err)

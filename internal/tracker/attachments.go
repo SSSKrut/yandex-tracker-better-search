@@ -175,7 +175,7 @@ func attachmentDedupeKey(a Attachment) string {
 }
 
 // attachmentDownloadURL returns the API URL used at sync time to fetch the
-// attachment bytes. It is intentionally NOT stored in IndexedFile.FileURL —
+// attachment bytes. It is intentionally NOT stored in IndexedFile.FileURL -
 // IndexedFile.FileURL holds a user-facing UI link instead (see
 // extractIndexedFilesForIssue), because this URL requires an OAuth token
 // and is not navigable from a browser.

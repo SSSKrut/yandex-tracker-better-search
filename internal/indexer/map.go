@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -90,31 +88,6 @@ func DefaultMapOptions() MapOptions {
 		SimilarityDims:       16,
 		ClusterK:             0,
 	}
-}
-
-func MapOptionsFromEnv() MapOptions {
-	opts := DefaultMapOptions()
-	opts.MaxIssues = readEnvInt("MAP_MAX_ISSUES", opts.MaxIssues)
-	opts.MaxFiles = readEnvInt("MAP_MAX_FILES", opts.MaxFiles)
-	opts.MaxFileNamesPerIssue = readEnvInt("MAP_MAX_FILE_NAMES", opts.MaxFileNamesPerIssue)
-	opts.MaxDocChars = readEnvInt("MAP_MAX_DOC_CHARS", opts.MaxDocChars)
-	opts.MaxVocab = readEnvInt("MAP_MAX_VOCAB", opts.MaxVocab)
-	opts.MaxNeighbors = readEnvInt("MAP_MAX_NEIGHBORS", opts.MaxNeighbors)
-	opts.SimilarityDims = readEnvInt("MAP_SIM_DIMS", opts.SimilarityDims)
-	opts.ClusterK = readEnvInt("MAP_CLUSTER_K", opts.ClusterK)
-	return opts
-}
-
-func readEnvInt(name string, fallback int) int {
-	val := strings.TrimSpace(os.Getenv(name))
-	if val == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(val)
-	if err != nil || parsed < 0 {
-		return fallback
-	}
-	return parsed
 }
 
 func (idx *Indexer) BuildSimilarityMap(ctx context.Context, opts MapOptions) (*MapData, error) {

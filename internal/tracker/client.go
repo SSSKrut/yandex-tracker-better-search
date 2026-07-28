@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -40,17 +38,14 @@ type Client struct {
 
 // NewClient - creates a new Tracker API client using an OAuth token.
 func NewClient(token, orgID string) *Client {
-	return NewClientWithAuth(token, AuthOAuth, orgID)
+	return NewClientWithAuth(token, AuthOAuth, orgID, defaultMaxTextFileSize)
 }
 
 // NewClientWithAuth - creates a new Tracker API client with the given auth
 // scheme (OAuth or IAM/Bearer).
-func NewClientWithAuth(token string, scheme AuthScheme, orgID string) *Client {
-	maxTextFileSize := defaultMaxTextFileSize
-	if raw := os.Getenv("ATTACHMENT_TEXT_MAX_BYTES"); raw != "" {
-		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil && parsed > 0 {
-			maxTextFileSize = parsed
-		}
+func NewClientWithAuth(token string, scheme AuthScheme, orgID string, maxTextFileSize int64) *Client {
+	if maxTextFileSize <= 0 {
+		maxTextFileSize = defaultMaxTextFileSize
 	}
 
 	if scheme != AuthIAM {

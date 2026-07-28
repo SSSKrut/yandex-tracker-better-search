@@ -22,10 +22,10 @@ var templatesFS embed.FS
 //go:embed static/*
 var staticFS embed.FS
 
-// contentSecurityPolicy - строгая политика: скрипты и стили только свои файлы,
-// инлайна нет нигде, поэтому 'unsafe-inline' не нужен. htmx лежит локально в
-// static/, из-за чего внешние источники можно запретить целиком — заодно UI
-// перестал зависеть от доступности CDN.
+// contentSecurityPolicy - strict: scripts and styles come from our own files
+// only. Nothing is inline, so 'unsafe-inline' isn't needed, and htmx lives in
+// static/, so external sources can be banned outright - which also means the UI
+// no longer depends on a CDN being reachable.
 const contentSecurityPolicy = "default-src 'none'; " +
 	"script-src 'self'; " +
 	"style-src 'self'; " +
@@ -36,8 +36,8 @@ const contentSecurityPolicy = "default-src 'none'; " +
 	"base-uri 'none'; " +
 	"frame-ancestors 'none'"
 
-// searchService - то, что ручки используют из searchapi.Service. Интерфейс
-// объявлен на стороне потребителя, чтобы их можно было тестировать без Manticore.
+// searchService - the part of searchapi.Service the handlers use. Declared on
+// the consumer side so they can be tested without Manticore.
 type searchService interface {
 	Status() searchapi.FullStatus
 	Logs(limit int) []syncer.LogEntry
@@ -100,10 +100,9 @@ func NewServer(addr string, api searchService, mcpHandler http.Handler) (*Server
 	}, nil
 }
 
-// highlightHTML собирает разметку подсветки сам, вместо того чтобы доверять
-// строке из Manticore: она склеена из маркеров и текста задачи, а текст задачи
-// приходит от пользователей трекера. Экранируем всё целиком и только потом
-// возвращаем маркерам вид тегов — других тегов в выводе появиться не может.
+// highlightHTML builds the markup itself rather than trusting the string from
+// Manticore, which mixes markers with issue text written by tracker users.
+// Escaping everything first means our <b> are the only tags that can come out.
 func highlightHTML(s string) template.HTML {
 	escaped := html.EscapeString(s)
 	escaped = strings.ReplaceAll(escaped, indexer.HighlightOpen, "<b>")
@@ -139,7 +138,7 @@ func progressStageLabel(stage string) string {
 	}
 }
 
-// formatDuration - число со склонённой единицей: "1 минуту", "45 минут".
+// formatDuration - a number with the unit declined: "1 минуту", "45 минут".
 func formatDuration(n float64, one, few, many string) string {
 	i := int(n)
 	return strconv.Itoa(i) + " " + pluralForm(i, one, few, many)
@@ -155,8 +154,8 @@ func pluralForm(i int, one, few, many string) string {
 	return many
 }
 
-// mux - описание маршрутов вместе с общими заголовками, отдельно от Start,
-// чтобы их можно было проверить без поднятия реального порта.
+// mux - routes plus the shared headers, kept out of Start so they can be
+// checked without binding a real port.
 func (s *Server) mux() http.Handler {
 	mux := http.NewServeMux()
 
@@ -171,7 +170,7 @@ func (s *Server) mux() http.Handler {
 	mux.HandleFunc("/api/sync", s.handleSync)
 	mux.HandleFunc("/api/map", s.handleMapData)
 
-	// Статика: htmx, стили и скрипты страниц — всё локальное, из embed.
+	// Static assets: htmx, page styles and scripts, all embedded.
 	mux.Handle("/static/", staticHandler())
 
 	// MCP (Model Context Protocol) over streamable HTTP, if configured.
@@ -187,14 +186,14 @@ func staticHandler() http.Handler {
 	files := http.FileServer(http.FS(staticFS))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Содержимое вшито в бинарник и меняется только вместе с ним.
+		// Baked into the binary, so it only changes when the binary does.
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		files.ServeHTTP(w, r)
 	})
 }
 
-// securityHeaders - CSP и спутники на каждый ответ. Экранирование в шаблонах
-// остаётся основной защитой, это второй рубеж на случай промаха в ней.
+// securityHeaders - CSP and friends on every response. Template escaping is
+// still the primary defence; this is the second line if it ever slips.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

@@ -19,8 +19,8 @@ import (
 // tool handlers (those would require a live Manticore).
 func TestServer_RegistersExpectedTools(t *testing.T) {
 	idx := indexer.NewIndexer("http://127.0.0.1:65535") // unreachable; we never call it
-	mgr := syncer.NewManager(nil, idx, nil, 1, 0, 0)
-	api := searchapi.NewService(idx, mgr)
+	mgr := syncer.NewManager(nil, idx, syncer.Options{Workers: 1})
+	api := searchapi.NewService(idx, mgr, searchapi.Options{})
 
 	srv := NewServer(api)
 
@@ -92,8 +92,8 @@ func TestServer_RegistersExpectedTools(t *testing.T) {
 // TestBearerAuth covers the three branches: open endpoint, valid token, bad token.
 func TestBearerAuth(t *testing.T) {
 	idx := indexer.NewIndexer("http://127.0.0.1:65535")
-	mgr := syncer.NewManager(nil, idx, nil, 1, 0, 0)
-	api := searchapi.NewService(idx, mgr)
+	mgr := syncer.NewManager(nil, idx, syncer.Options{Workers: 1})
+	api := searchapi.NewService(idx, mgr, searchapi.Options{})
 
 	cases := []struct {
 		name     string
@@ -112,7 +112,7 @@ func TestBearerAuth(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := NewHTTPHandler(api, tc.token)
 			// A bare GET on the root MCP path lands in the StreamableHTTPHandler, which
-			// will return 4xx (no MCP session) — but only AFTER auth middleware has
+			// will return 4xx (no MCP session) - but only AFTER auth middleware has
 			// passed. We only care that auth either rejects (401) or lets the request
 			// through to MCP (anything else).
 			req := httptest.NewRequest("GET", "/mcp", nil)

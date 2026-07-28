@@ -147,9 +147,9 @@ function updateLegend(data) {
     }
 }
 
-// Заголовки, ключи и ссылки приходят из трекера, поэтому собираются узлами
-// через textContent, а не склейкой разметки: строка вида
-// "<img src=x onerror=...>" в заголовке задачи иначе выполнилась бы.
+// Titles, keys and links come from the tracker, so they are built as nodes
+// with textContent instead of concatenated markup: an issue titled
+// "<img src=x onerror=...>" would otherwise execute.
 function textRow(label, value) {
     const row = document.createElement('div');
     if (label) row.appendChild(document.createTextNode(label));
@@ -157,8 +157,8 @@ function textRow(label, value) {
     return row;
 }
 
-// safeURL пропускает только http(s): file_url приходит из трекера,
-// а javascript:-ссылка в href сработала бы по клику.
+// safeURL allows http(s) only: file_url comes from the tracker, and a
+// javascript: link in href would fire on click.
 function safeURL(raw) {
     try {
         const u = new URL(raw, window.location.origin);

@@ -244,14 +244,14 @@ func convertToIndexed(issue Issue, comments []Comment) IndexedIssue {
 
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
 
-// stripHTML - превращает HTML трекера в плоский текст.
+// stripHTML - turns tracker HTML into plain text.
 //
-// Сущности декодируются ДО вырезания тегов. В обратном порядке декодирование
-// изготавливало разметку уже после чистки: &amp;lt;img onerror=...&amp;gt;
-// из описания задачи попадало в индекс живым тегом.
+// Entities are decoded BEFORE tags are stripped. The other order let decoding
+// manufacture markup after the cleanup: an escaped <img onerror=...> in a
+// description reached the index as a live tag.
 func stripHTML(s string) string {
 	s = html.UnescapeString(s)
-	// UnescapeString отдаёт за &nbsp; неразрывный пробел — для индекса это мусор.
+	// UnescapeString turns &nbsp; into a non-breaking space, which is noise here.
 	s = strings.ReplaceAll(s, "\u00a0", " ")
 	s = htmlTagPattern.ReplaceAllString(s, "")
 

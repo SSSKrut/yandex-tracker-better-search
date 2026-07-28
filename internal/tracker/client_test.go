@@ -15,14 +15,14 @@ func TestClient_AuthHeader_OAuth(t *testing.T) {
 }
 
 func TestClient_AuthHeader_IAM(t *testing.T) {
-	got := captureAuthHeader(t, NewClientWithAuth("iam456", AuthIAM, "org"))
+	got := captureAuthHeader(t, NewClientWithAuth("iam456", AuthIAM, "org", 0))
 	if want := "Bearer iam456"; got != want {
 		t.Fatalf("IAM scheme: got %q, want %q", got, want)
 	}
 }
 
 func TestClient_AuthHeader_UnknownSchemeFallsBackToOAuth(t *testing.T) {
-	got := captureAuthHeader(t, NewClientWithAuth("tok", "garbage", "org"))
+	got := captureAuthHeader(t, NewClientWithAuth("tok", "garbage", "org", 0))
 	if want := "OAuth tok"; got != want {
 		t.Fatalf("fallback: got %q, want %q", got, want)
 	}

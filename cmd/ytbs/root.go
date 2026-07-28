@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/config"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/indexer"
+	"github.com/SSSKrut/yandex-tracker-better-search/internal/searchapi"
+	syncer "github.com/SSSKrut/yandex-tracker-better-search/internal/sync"
 	"github.com/SSSKrut/yandex-tracker-better-search/internal/tracker"
 
 	"github.com/spf13/cobra"
 )
-
-const defaultManticoreURL = "http://localhost:9308"
 
 // Build-time metadata. Overridden by goreleaser via -ldflags (-X main.version=...).
 var (
@@ -24,10 +24,7 @@ var (
 )
 
 var (
-	manticoreURL      string
-	trackerToken      string
-	trackerAuthScheme tracker.AuthScheme
-	trackerOrgID      string
+	cfg *config.Config
 
 	ctx context.Context
 	idx *indexer.Indexer
@@ -42,9 +39,13 @@ Indexes issues and comments from Yandex Tracker into Manticore Search
 for fast full-text searching with rich filtering capabilities.`,
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		trackerToken, trackerAuthScheme = resolveTrackerAuth()
-		trackerOrgID = os.Getenv("TRACKER_CLOUD_ORG_ID")
-		manticoreURL = resolveManticoreURL()
+		// The only place the environment is read; from here the values
+		// travel as constructor arguments.
+		loaded, err := config.Load()
+		if err != nil {
+			return err
+		}
+		cfg = loaded
 
 		var cancel context.CancelFunc
 		ctx, cancel = signal.NotifyContext(
@@ -53,7 +54,7 @@ for fast full-text searching with rich filtering capabilities.`,
 		)
 		_ = cancel
 
-		idx = indexer.NewIndexer(manticoreURL)
+		idx = indexer.NewIndexer(cfg.ManticoreURL)
 		if err := idx.CreateTable(ctx); err != nil {
 			return fmt.Errorf("failed to create Manticore table: %w", err)
 		}
@@ -62,35 +63,10 @@ for fast full-text searching with rich filtering capabilities.`,
 	},
 }
 
-// resolveTrackerAuth reads the Tracker credentials from the environment. An IAM
-// token takes precedence when both are set — it's the more modern auth method
-// recommended by Yandex Cloud.
-func resolveTrackerAuth() (string, tracker.AuthScheme) {
-	if iam := os.Getenv("TRACKER_IAM_TOKEN"); iam != "" {
-		return iam, tracker.AuthIAM
-	}
-	return os.Getenv("TRACKER_OAUTH_TOKEN"), tracker.AuthOAuth
-}
-
-func resolveManticoreURL() string {
-	if url := os.Getenv("MANTICORE_URL"); url != "" {
-		return url
-	}
-	return defaultManticoreURL
-}
-
-// RequireTrackerEnv ensures a Tracker auth token and TRACKER_CLOUD_ORG_ID are
-// set. Either TRACKER_OAUTH_TOKEN or TRACKER_IAM_TOKEN must be provided.
-// Subcommands that talk to the Yandex Tracker API (sync, serve) call this
-// from their PreRunE. Read-only subcommands (search, mcp) skip it.
+// RequireTrackerEnv ensures the Tracker credentials are present. Subcommands
+// that talk to the Yandex Tracker API (sync, serve) call this from their PreRunE.
 func RequireTrackerEnv() error {
-	if trackerToken == "" {
-		return fmt.Errorf("either TRACKER_OAUTH_TOKEN or TRACKER_IAM_TOKEN environment variable is required")
-	}
-	if trackerOrgID == "" {
-		return fmt.Errorf("TRACKER_CLOUD_ORG_ID environment variable is required")
-	}
-	return nil
+	return cfg.RequireTracker()
 }
 
 func main() {
@@ -102,6 +78,13 @@ func main() {
 func init() {
 	rootCmd.Version = fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose logging")
+
+	// Generated from the config.Config tags so the help can't drift from
+	// what is actually read.
+	envHelp, err := config.Description()
+	if err != nil {
+		envHelp = "Environment variables: (описание недоступно: " + err.Error() + ")"
+	}
 
 	rootCmd.SetHelpTemplate(`{{.Long}}
 
@@ -115,19 +98,43 @@ Flags:
 {{.LocalFlags.FlagUsages}}
 Global Flags:
 {{.InheritedFlags.FlagUsages}}
-Environment Variables:
-  TRACKER_OAUTH_TOKEN   OAuth token for Yandex Tracker (required for sync/serve, or use TRACKER_IAM_TOKEN)
-  TRACKER_IAM_TOKEN     IAM (Bearer) token for Yandex Tracker; takes precedence over OAuth
-  TRACKER_CLOUD_ORG_ID  Cloud Organization ID (required for sync/serve)
-  MANTICORE_URL         Manticore Search URL (default: http://localhost:9308)
-  ATTACHMENT_TEXT_MAX_BYTES  Max size in bytes for downloading/indexing text attachments (default: 2097152)
+` + envHelp + `
 
 Use "{{.CommandPath}} [command] --help" for more information about a command.
 `)
 }
 
-func GetContext() context.Context              { return ctx }
-func GetIndexer() *indexer.Indexer             { return idx }
-func GetTrackerToken() string                  { return trackerToken }
-func GetTrackerAuthScheme() tracker.AuthScheme { return trackerAuthScheme }
-func GetTrackerOrgID() string                  { return trackerOrgID }
+func GetContext() context.Context  { return ctx }
+func GetIndexer() *indexer.Indexer { return idx }
+func GetConfig() *config.Config    { return cfg }
+
+func GetTrackerClient() *tracker.Client {
+	token, isIAM := cfg.TrackerAuth()
+	scheme := tracker.AuthOAuth
+	if isIAM {
+		scheme = tracker.AuthIAM
+	}
+	return tracker.NewClientWithAuth(token, scheme, cfg.OrgID, cfg.AttachmentTextMaxBytes)
+}
+
+// mapOptions - map settings from the config. They live here, at the wiring
+// point, because indexer shouldn't know a config exists.
+func mapOptions() indexer.MapOptions {
+	return indexer.MapOptions{
+		MaxIssues:            cfg.MapMaxIssues,
+		MaxFiles:             cfg.MapMaxFiles,
+		MaxFileNamesPerIssue: cfg.MapMaxFileNames,
+		MaxDocChars:          cfg.MapMaxDocChars,
+		MaxVocab:             cfg.MapMaxVocab,
+		MaxNeighbors:         cfg.MapMaxNeighbors,
+		SimilarityDims:       cfg.MapSimilarityDims,
+		ClusterK:             cfg.MapClusterK,
+	}
+}
+
+func newSearchService(mgr *syncer.Manager) *searchapi.Service {
+	return searchapi.NewService(idx, mgr, searchapi.Options{
+		MapCacheTTL: cfg.MapCacheTTL,
+		MapOptions:  mapOptions(),
+	})
+}
