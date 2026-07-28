@@ -176,7 +176,7 @@ func (c *Client) buildIndexed(ctx context.Context, issues []Issue, workers int, 
 			result.Errors = append(result.Errors, r.errors...)
 		}
 
-		if r.issue.UpdatedAt.Time.After(result.MaxUpdatedAt) {
+		if r.issue.UpdatedAt.After(result.MaxUpdatedAt) {
 			result.MaxUpdatedAt = r.issue.UpdatedAt.Time
 		}
 

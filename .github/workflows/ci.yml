@@ -11,6 +11,15 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      manticore:
+        image: manticoresearch/manticore:latest
+        env:
+          EXTRA: 1
+        ports:
+          - 9308:9308
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +31,35 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Test
-        run: go test ./...
+      - name: Wait for Manticore
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf --data-urlencode 'query=SHOW TABLES' 'http://127.0.0.1:9308/sql?mode=raw' >/dev/null; then
+              echo "Manticore ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Manticore did not become ready in 30s" >&2
+          exit 1
 
-      - name: Vet
-        run: go vet ./...
+      - name: Test
+        env:
+          # Включает TestLive_*: поисковый SQL проверяется настоящим движком,
+          # синтаксические ошибки Manticore на строковых тестах не видны.
+          MANTICORE_TEST_URL: http://127.0.0.1:9308
+        run: go test -race ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2

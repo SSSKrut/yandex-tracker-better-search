@@ -432,4 +432,3 @@ func (s *Service) SearchRich(ctx context.Context, p SearchParams) ([]IndexerSear
 		Assignee: p.Assignee,
 	}, limit)
 }
-

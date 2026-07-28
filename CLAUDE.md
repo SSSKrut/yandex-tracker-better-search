@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Common commands
 
+`Taskfile.yml` wraps everything below — `task --list` shows the tasks (`build`, `run`, `test`, `test:race`, `test:live`, `lint`, `fmt`, `up`, `down`, `ci`). On Arch the binary is `go-task`, because `task` belongs to Taskwarrior. The raw commands still work:
+
 Build / run locally (requires a running Manticore at `MANTICORE_URL`, defaults to `http://localhost:9308`):
 
 ```bash

@@ -29,7 +29,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Filters: filterOptions,
 	}
 
-	s.templates.ExecuteTemplate(w, "index.html", data)
+	s.render(w, "index.html", data)
 }
 
 // handleLogs - logs page
@@ -42,7 +42,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		Status: s.api.Status().Status,
 	}
 
-	s.templates.ExecuteTemplate(w, "logs.html", data)
+	s.render(w, "logs.html", data)
 }
 
 // handleMap - map visualization page
@@ -53,7 +53,7 @@ func (s *Server) handleMap(w http.ResponseWriter, r *http.Request) {
 		Status: s.api.Status().Status,
 	}
 
-	s.templates.ExecuteTemplate(w, "map.html", data)
+	s.render(w, "map.html", data)
 }
 
 // handleMapData - map data API
@@ -108,14 +108,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		params.Author != "" || params.Assignee != ""
 
 	if query == "" && !hasFilters {
-		s.templates.ExecuteTemplate(w, "results.html", data)
+		s.render(w, "results.html", data)
 		return
 	}
 
 	results, err := s.api.SearchRich(r.Context(), params)
 	if err != nil {
 		data.Error = err.Error()
-		s.templates.ExecuteTemplate(w, "results.html", data)
+		s.render(w, "results.html", data)
 		log.Print("Search error: ", err)
 		return
 	}
@@ -124,17 +124,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	data.Count = len(results)
 	log.Printf("Search query: %q, filters: %+v, results: %d", query, params, len(results))
 
-	if err := s.templates.ExecuteTemplate(w, "results.html", data); err != nil {
-		log.Printf("Template error: %v", err)
-	}
+	s.render(w, "results.html", data)
 }
 
 // handleStatus - status API (htmx)
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	s.templates.ExecuteTemplate(w, "status.html", s.api.Status().Status)
+	s.render(w, "status.html", s.api.Status().Status)
 }
 
-// handleSync - syncronization control API (htmx)
+// handleSync - synchronization control API (htmx)
 func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -144,9 +142,21 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("HX-Trigger", "sync-started")
 		}
 	case http.MethodDelete:
-		s.api.CancelSync()
-		w.Header().Set("HX-Trigger", "sync-cancelled")
+		if err := s.api.CancelSync(); err != nil {
+			log.Printf("Error cancelling sync: %v", err)
+			w.Header().Set("HX-Trigger", "sync-error")
+		} else {
+			w.Header().Set("HX-Trigger", "sync-cancelled")
+		}
 	}
 
-	s.templates.ExecuteTemplate(w, "status.html", s.api.Status().Status)
+	s.render(w, "status.html", s.api.Status().Status)
+}
+
+// render - выполняет шаблон. Ответ к этому моменту уже частично записан,
+// поэтому ошибку остаётся только залогировать.
+func (s *Server) render(w http.ResponseWriter, name string, data any) {
+	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
+		log.Printf("Error rendering %s: %v", name, err)
+	}
 }

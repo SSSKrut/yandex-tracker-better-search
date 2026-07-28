@@ -1,0 +1,96 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  BINARY: ytbs
+  MAIN: ./cmd/ytbs
+  CLI_PKG: github.com/SSSKrut/yandex-tracker-better-search/internal/cli
+  MANTICORE: '{{.MANTICORE_URL | default "http://localhost:9308"}}'
+
+tasks:
+  default:
+    desc: Показать список задач
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Собрать бинарник с версией из git
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+      COMMIT:
+        sh: git rev-parse --short HEAD 2>/dev/null || echo none
+      DATE:
+        sh: date -u +%Y-%m-%dT%H:%M:%SZ
+    cmds:
+      - >-
+        go build -trimpath
+        -ldflags "-X {{.CLI_PKG}}.version={{.VERSION}}
+        -X {{.CLI_PKG}}.commit={{.COMMIT}}
+        -X {{.CLI_PKG}}.date={{.DATE}}"
+        -o {{.BINARY}} {{.MAIN}}
+
+  run:
+    desc: 'Запустить из исходников: task run -- serve --addr :8080'
+    cmds:
+      - go run {{.MAIN}} {{.CLI_ARGS}}
+
+  test:
+    desc: Юнит-тесты
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Тесты с детектором гонок
+    cmds:
+      - go test -race ./...
+
+  test:live:
+    desc: Тесты поискового SQL против живого Manticore
+    deps: [manticore]
+    env:
+      MANTICORE_TEST_URL: '{{.MANTICORE}}'
+    cmds:
+      - go test ./internal/indexer -run TestLive -v
+
+  lint:
+    desc: golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Отформатировать код
+    cmds:
+      - golangci-lint fmt ./...
+
+  manticore:
+    desc: Поднять Manticore и дождаться готовности по healthcheck
+    cmds:
+      - docker compose up -d --wait manticore
+
+  up:
+    desc: Поднять весь стек (UI на http://localhost:8080)
+    cmds:
+      - docker compose up -d --build --wait
+
+  down:
+    desc: Остановить стек
+    cmds:
+      - docker compose down
+
+  logs:
+    desc: 'Логи контейнеров: task logs -- ytbs'
+    cmds:
+      - docker compose logs -f {{.CLI_ARGS}}
+
+  ci:
+    desc: Прогнать всё, что гоняет CI (нужен docker — тесты идут с живым Manticore)
+    deps: [manticore]
+    env:
+      MANTICORE_TEST_URL: '{{.MANTICORE}}'
+    cmds:
+      - task: build
+      - task: lint
+      - go test -race ./...

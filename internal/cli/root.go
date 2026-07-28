@@ -121,8 +121,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.
 `)
 }
 
-func GetContext() context.Context        { return ctx }
-func GetIndexer() *indexer.Indexer       { return idx }
-func GetTrackerToken() string            { return trackerToken }
+func GetContext() context.Context              { return ctx }
+func GetIndexer() *indexer.Indexer             { return idx }
+func GetTrackerToken() string                  { return trackerToken }
 func GetTrackerAuthScheme() tracker.AuthScheme { return trackerAuthScheme }
-func GetTrackerOrgID() string            { return trackerOrgID }
+func GetTrackerOrgID() string                  { return trackerOrgID }
