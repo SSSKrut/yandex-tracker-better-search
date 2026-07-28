@@ -1,0 +1,11 @@
+/* Классы вместо инлайновых style= в status.html: под строгим CSP
+   атрибут style запрещён, а эти правила были статическими. */
+.sync-time {
+    margin-left: 8px;
+    color: #999;
+}
+
+.sync-trigger {
+    margin-left: 12px;
+    padding: 4px 12px;
+}

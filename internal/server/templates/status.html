@@ -41,11 +41,11 @@
     <span title="{{.LastSyncError}}">⚠️ Ошибка синхронизации</span>
     {{else if not .LastSyncAt.IsZero}}
     <span>✓ {{.IssuesCount}} задач, {{.FilesCount}} файлов (текстовых: {{.TextFiles}})</span>
-    <span style="margin-left:8px;color:#999;">{{timeAgo .LastSyncAt}}</span>
+    <span class="sync-time">{{timeAgo .LastSyncAt}}</span>
     {{else}}
     <span>Не синхронизировано</span>
     {{end}}
-    <button class="btn btn-primary" style="margin-left:12px;padding:4px 12px;"
+    <button class="btn btn-primary sync-trigger"
             hx-post="/api/sync"
             hx-target="#sync-status"
             hx-swap="innerHTML">

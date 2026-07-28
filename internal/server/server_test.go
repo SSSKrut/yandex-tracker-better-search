@@ -1,6 +1,10 @@
 package server
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +199,138 @@ func TestHighlightHTML_ForgedMarkerCannotInjectTags(t *testing.T) {
 	}
 	if got != "&lt;b&gt;жирный&lt;/b&gt; и &lt;script&gt;alert(1)&lt;/script&gt;" {
 		t.Errorf("unexpected escaping: %q", got)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	srv := newTestServer(t, &fakeAPI{})
+	ts := httptest.NewServer(srv.mux())
+	defer ts.Close()
+
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, want := range []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "frame-ancestors 'none'"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q is missing %q", csp, want)
+		}
+	}
+	// Инлайна в шаблонах не осталось, поэтому послаблений быть не должно.
+	for _, bad := range []string{"unsafe-inline", "unsafe-eval", "http://", "https://"} {
+		if strings.Contains(csp, bad) {
+			t.Errorf("CSP must not contain %q: %s", bad, csp)
+		}
+	}
+
+	for header, want := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"Referrer-Policy":        "no-referrer",
+		"X-Frame-Options":        "DENY",
+	} {
+		if got := resp.Header.Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
+	}
+}
+
+func TestStaticAssetsAreServed(t *testing.T) {
+	srv := newTestServer(t, &fakeAPI{})
+	ts := httptest.NewServer(srv.mux())
+	defer ts.Close()
+
+	assets := map[string]string{
+		"/static/htmx.min.js": "javascript",
+		"/static/index.js":    "javascript",
+		"/static/map.js":      "javascript",
+		"/static/index.css":   "text/css",
+		"/static/logs.css":    "text/css",
+		"/static/map.css":     "text/css",
+		"/static/app.css":     "text/css",
+	}
+
+	for path, wantType := range assets {
+		resp, err := ts.Client().Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, resp.StatusCode)
+			continue
+		}
+		if len(body) == 0 {
+			t.Errorf("GET %s returned an empty body", path)
+		}
+		if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, wantType) {
+			t.Errorf("GET %s Content-Type = %q, want %q", path, ct, wantType)
+		}
+	}
+}
+
+// TestTemplatesReferenceExistingAssets ловит опечатку в пути и файл, забытый
+// при выносе инлайна: под строгим CSP такая страница молча останется без стилей.
+func TestTemplatesReferenceExistingAssets(t *testing.T) {
+	pages, err := templatesFS.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("read templates: %v", err)
+	}
+
+	assetRef := regexp.MustCompile(`(?:src|href)="(/static/[^"]+)"`)
+	found := 0
+
+	for _, page := range pages {
+		raw, err := templatesFS.ReadFile("templates/" + page.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", page.Name(), err)
+		}
+
+		for _, m := range assetRef.FindAllStringSubmatch(string(raw), -1) {
+			found++
+			if _, err := staticFS.ReadFile(strings.TrimPrefix(m[1], "/")); err != nil {
+				t.Errorf("%s references %s, which is not embedded", page.Name(), m[1])
+			}
+		}
+	}
+
+	if found == 0 {
+		t.Error("expected the templates to reference static assets")
+	}
+}
+
+func TestTemplatesHaveNoInlineCode(t *testing.T) {
+	// Инлайновые скрипты, стили и обработчики строгий CSP не выполнит —
+	// страница сломается молча, поэтому запрещаем их на уровне теста.
+	pages, err := templatesFS.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("read templates: %v", err)
+	}
+
+	inlineHandler := regexp.MustCompile(`\son[a-z]+\s*=\s*"`)
+
+	for _, page := range pages {
+		raw, err := templatesFS.ReadFile("templates/" + page.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", page.Name(), err)
+		}
+		body := string(raw)
+
+		if strings.Contains(body, "<script>") {
+			t.Errorf("%s has an inline <script> block", page.Name())
+		}
+		if strings.Contains(body, "<style>") {
+			t.Errorf("%s has an inline <style> block", page.Name())
+		}
+		if strings.Contains(body, `style="`) {
+			t.Errorf("%s has an inline style attribute", page.Name())
+		}
+		if loc := inlineHandler.FindString(body); loc != "" {
+			t.Errorf("%s has an inline event handler (%s)", page.Name(), strings.TrimSpace(loc))
+		}
 	}
 }

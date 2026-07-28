@@ -19,6 +19,23 @@ import (
 //go:embed templates/*
 var templatesFS embed.FS
 
+//go:embed static/*
+var staticFS embed.FS
+
+// contentSecurityPolicy - строгая политика: скрипты и стили только свои файлы,
+// инлайна нет нигде, поэтому 'unsafe-inline' не нужен. htmx лежит локально в
+// static/, из-за чего внешние источники можно запретить целиком — заодно UI
+// перестал зависеть от доступности CDN.
+const contentSecurityPolicy = "default-src 'none'; " +
+	"script-src 'self'; " +
+	"style-src 'self'; " +
+	"img-src 'self' data:; " +
+	"font-src 'self'; " +
+	"connect-src 'self'; " +
+	"form-action 'self'; " +
+	"base-uri 'none'; " +
+	"frame-ancestors 'none'"
+
 // searchService - то, что ручки используют из searchapi.Service. Интерфейс
 // объявлен на стороне потребителя, чтобы их можно было тестировать без Manticore.
 type searchService interface {
@@ -138,9 +155,9 @@ func pluralForm(i int, one, few, many string) string {
 	return many
 }
 
-// mux - описание маршрутов, отдельно от Start, чтобы их можно было проверить
-// без поднятия реального порта.
-func (s *Server) mux() *http.ServeMux {
+// mux - описание маршрутов вместе с общими заголовками, отдельно от Start,
+// чтобы их можно было проверить без поднятия реального порта.
+func (s *Server) mux() http.Handler {
 	mux := http.NewServeMux()
 
 	// Pages
@@ -154,13 +171,40 @@ func (s *Server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/sync", s.handleSync)
 	mux.HandleFunc("/api/map", s.handleMapData)
 
+	// Статика: htmx, стили и скрипты страниц — всё локальное, из embed.
+	mux.Handle("/static/", staticHandler())
+
 	// MCP (Model Context Protocol) over streamable HTTP, if configured.
 	if s.mcpHandler != nil {
 		mux.Handle("/mcp", s.mcpHandler)
 		mux.Handle("/mcp/", s.mcpHandler)
 	}
 
-	return mux
+	return securityHeaders(mux)
+}
+
+func staticHandler() http.Handler {
+	files := http.FileServer(http.FS(staticFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Содержимое вшито в бинарник и меняется только вместе с ним.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		files.ServeHTTP(w, r)
+	})
+}
+
+// securityHeaders - CSP и спутники на каждый ответ. Экранирование в шаблонах
+// остаётся основной защитой, это второй рубеж на случай промаха в ней.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Frame-Options", "DENY")
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start - starts the HTTP server
